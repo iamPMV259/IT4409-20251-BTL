@@ -1,3 +1,43 @@
+// Main Tab switching functionality
+function switchTab(event, tabName) {
+    const tabs = document.querySelectorAll('.tab');
+    const panes = document.querySelectorAll('.tab-pane');
+
+    // Bỏ active của tất cả các tab và pane
+    tabs.forEach(tab => tab.classList.remove('active'));
+    panes.forEach(pane => pane.classList.remove('active'));
+
+    // Thêm active cho tab và pane được click
+    event.currentTarget.classList.add('active');
+    document.getElementById(tabName).classList.add('active');
+}
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Simulate real-time notification updates
+    setInterval(() => {
+        const badge = document.querySelector('.notification-badge');
+        if (badge) {
+            const currentCount = parseInt(badge.textContent);
+            const newCount = Math.floor(Math.random() * 10) + 1;
+            if (newCount !== currentCount) {
+                badge.textContent = newCount;
+                badge.classList.add('pulse');
+                setTimeout(() => badge.classList.remove('pulse'), 2000);
+            }
+        }
+    }, 15000);
+    const projectCards = document.querySelectorAll('.project-card');
+    projectCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const projectName = card.getAttribute('data-project-name');
+            if (projectName) {
+                alert(Opening project: ${projectName});
+            }
+        });
+    });
+});
+Vũ
 * {
     margin: 0;
     padding: 0;
@@ -16,8 +56,8 @@
     --text: #334155;
     --bg-card: #ffffff;
     --bg-hover: #f1f5f9;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+    --shadow: 0 1px 3px rgba(0,0,0,0.12);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
 }
 
 body {
@@ -155,6 +195,7 @@ body {
 .tab-content {
     padding: 30px;
     min-height: 600px;
+    animation: fadeIn 0.5s ease;
 }
 
 .tab-pane {
@@ -172,55 +213,25 @@ body {
     }
 }
 
-
+/* Animations */
 @keyframes slideIn {
-    from {
-        transform: translateX(-100%);
-    }
-
-    to {
-        transform: translateX(0);
-    }
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse {
-    0% {
-        transform: scale(1);
-        opacity: 1;
-    }
-
-    50% {
-        transform: scale(1.05);
-        opacity: 0.8;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
 .pulse {
     animation: pulse 2s infinite;
-}
-
-/* Cập nhật lại .tab-content để có hiệu ứng fadeIn */
-.tab-content {
-    padding: 30px;
-    min-height: 600px;
-    animation: fadeIn 0.5s ease;
 }
 
 /* Common utility classes */
@@ -251,7 +262,9 @@ body {
 .btn-primary:hover {
     background: var(--primary-dark);
 }
-/* Projects Tab Styles  */
+
+/* === BẮT ĐẦU CODE CỦA DEV B === */
+/* Projects Tab Styles */
 .projects-header {
     display: flex;
     justify-content: space-between;
@@ -277,6 +290,12 @@ body {
     gap: 6px;
 }
 
+.filter-btn:hover {
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
 .search-box {
     padding: 8px 16px;
     border: 1px solid var(--border);
@@ -285,6 +304,13 @@ body {
     transition: all 0.3s ease;
 }
 
+.search-box:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* === ĐÂY LÀ PHẦN QUAN TRỌNG NHẤT ĐỂ SỬA LỖI === */
 .projects-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -302,7 +328,34 @@ body {
     overflow: hidden;
 }
 
-/* ... dán phần còn lại của CSS vào đây ... */
+.project-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary), #8b5cf6);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.project-card:hover::before {
+    transform: scaleX(1);
+}
+
+.project-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+}
+
+.project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 15px;
+}
 
 .project-status {
     padding: 4px 10px;
@@ -316,3 +369,170 @@ body {
 .project-status.planning { background: var(--warning); }
 .project-status.completed { background: #94a3b8; }
 .project-status.on-hold { background: var(--danger); }
+
+.project-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--dark);
+}
+
+.project-description {
+    color: #64748b;
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 15px;
+}
+
+.project-meta {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.project-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 10px;
+    background: var(--light);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.stat-item:hover {
+    background: white;
+    box-shadow: var(--shadow);
+    transform: scale(1.05);
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.project-progress {
+    margin-bottom: 15px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--light);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), #8b5cf6);
+    border-radius: 10px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255,255,255,0.3), transparent, rgba(255,255,255,0.3));
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.project-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 15px;
+    border-top: 1px solid var(--border);
+}
+
+.project-members {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.members-list {
+    display: flex;
+    margin-left: -8px;
+}
+
+.member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid white;
+    margin-left: -8px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    transition: transform 0.2s ease;
+    position: relative;
+}
+
+.member-avatar:hover {
+    transform: scale(1.1);
+    z-index: 1;
+}
+
+.project-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.action-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--light);
+}
+
+.action-icon:hover {
+    background: var(--primary);
+    color: white;
+    transform: scale(1.1);
+}
