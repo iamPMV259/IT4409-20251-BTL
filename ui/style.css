@@ -251,3 +251,68 @@ body {
 .btn-primary:hover {
     background: var(--primary-dark);
 }
+/* Projects Tab Styles  */
+.projects-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+.filters {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.filter-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.search-box {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 200px;
+    transition: all 0.3s ease;
+}
+
+.projects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.project-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+/* ... dán phần còn lại của CSS vào đây ... */
+
+.project-status {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--success);
+    color: white;
+}
+
+.project-status.planning { background: var(--warning); }
+.project-status.completed { background: #94a3b8; }
+.project-status.on-hold { background: var(--danger); }
