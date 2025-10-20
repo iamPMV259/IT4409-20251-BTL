@@ -28,3 +28,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 15000);
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    // ... code cũ (setInterval) ...
+
+    // THÊM CODE MỚI VÀO ĐÂY
+    // Add click event listener for project cards
+    const projectCards = document.querySelectorAll('.project-card');
+    projectCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const projectName = card.getAttribute('data-project-name');
+            if (projectName) {
+                alert(Opening project: ${projectName});
+            }
+        });
+    });
+});
