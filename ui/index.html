@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Management System - DevA Core</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <span>📋</span>
+                <span>TaskFlow Pro</span>
+            </div>
+            <div class="user-info">
+                <div class="notification">
+                    <span>🔔</span>
+                    <span class="notification-badge">5</span>
+                </div>
+                <div class="avatar">NT</div>
+            </div>
+        </div>
+
+        <div class="tabs-container">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'projects')">
+                    <span class="tab-icon">📁</span>
+                    <span>Dự Án</span>
+                </button>
+                <button class="tab" onclick="switchTab(event, 'kanban')">
+                    <span class="tab-icon">📊</span>
+                    <span>Bảng Công Việc</span>
+                </button>
+                <button class="tab" onclick="switchTab(event, 'calendar')">
+                    <span class="tab-icon">📅</span>
+                    <span>Lịch & Gantt</span>
+                </button>
+                <button class="tab" onclick="switchTab(event, 'mytasks')">
+                    <span class="tab-icon">✅</span>
+                    <span>Công Việc Của Tôi</span>
+                </button>
+                <button class="tab" onclick="switchTab(event, 'reports')">
+                    <span class="tab-icon">📈</span>
+                    <span>Báo Cáo & Theo Dõi</span>
+                </button>
+            </div>
+
+            <div class="tab-content">
+                <div id="projects" class="tab-pane active">
+                    <h2>Projects Tab - DevB sẽ implement</h2>
+                </div>
+                <div id="kanban" class="tab-pane">
+                    <h2>Kanban Tab - DevC sẽ implement</h2>
+                </div>
+                <div id="calendar" class="tab-pane">
+                    <h2>Calendar & Gantt Tab - DevD sẽ implement</h2>
+                </div>
+                <div id="mytasks" class="tab-pane">
+                    <h2>My Tasks Tab - DevD sẽ implement</h2>
+                </div>
+                <div id="reports" class="tab-pane">
+                    <h2>Reports Tab - DevE sẽ implement</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
