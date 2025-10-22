@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.addEventListener('click', () => {
             const projectName = card.getAttribute('data-project-name');
             if (projectName) {
-                alert(Opening project: ${projectName});
+                alert(`Opening project: ${projectName}`);
             }
         });
     });
