@@ -269,8 +269,108 @@
                 </div>
 
                 <div id="mytasks" class="tab-pane">
-                    <h2>My Tasks Tab - DevD sẽ implement</h2>
+                    <div class="my-tasks-header">
+                        <h2>Công Việc Của Tôi</h2>
+                        <div class="task-filters">
+                            <span class="filter-chip active">Tất cả (12)</span>
+                            <span class="filter-chip">Quá hạn (2)</span>
+                            <span class="filter-chip">Tuần này (5)</span>
+                            <span class="filter-chip">Ưu tiên cao (3)</span>
+                        </div>
+                    </div>
+
+                    <div class="tasks-list">
+                        <div class="task-item">
+                            <div class="task-checkbox"></div>
+                            <div class="task-details">
+                                <div class="task-name">Fix bug checkout process</div>
+                                <div class="task-info">
+                                    <span>🏢 Website E-commerce</span>
+                                    <span>📅 Hôm nay</span>
+                                    <span>🔴 Ưu tiên cao</span>
+                                    <span>🏷️ Bug</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button class="action-btn">✏️</button>
+                                <button class="action-btn">👁️</button>
+                                <button class="action-btn">✅</button>
+                            </div>
+                        </div>
+
+                        <div class="task-item">
+                            <div class="task-checkbox"></div>
+                            <div class="task-details">
+                                <div class="task-name">Thiết kế database schema</div>
+                                <div class="task-info">
+                                    <span>🏢 Website E-commerce</span>
+                                    <span>📅 20/12/2024</span>
+                                    <span>🟡 Ưu tiên trung bình</span>
+                                    <span>🏷️ Feature</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button class="action-btn">✏️</button>
+                                <button class="action-btn">👁️</button>
+                                <button class="action-btn">✅</button>
+                            </div>
+                        </div>
+
+                        <div class="task-item">
+                            <div class="task-checkbox checked"></div>
+                            <div class="task-details">
+                                <div class="task-name" style="text-decoration: line-through; opacity: 0.6;">Create
+                                    project documentation</div>
+                                <div class="task-info">
+                                    <span>🏢 Website E-commerce</span>
+                                    <span>✅ Hoàn thành</span>
+                                    <span>🟢 Ưu tiên thấp</span>
+                                    <span>🏷️ Docs</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button class="action-btn">👁️</button>
+                            </div>
+                        </div>
+
+                        <div class="task-item">
+                            <div class="task-checkbox"></div>
+                            <div class="task-details">
+                                <div class="task-name">Implement user authentication API</div>
+                                <div class="task-info">
+                                    <span>🏢 Mobile App Banking</span>
+                                    <span>📅 18/12/2024</span>
+                                    <span>🔴 Ưu tiên cao</span>
+                                    <span>🏷️ Backend</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button class="action-btn">✏️</button>
+                                <button class="action-btn">👁️</button>
+                                <button class="action-btn">✅</button>
+                            </div>
+                        </div>
+
+                        <div class="task-item" style="border-left: 4px solid var(--danger);">
+                            <div class="task-checkbox"></div>
+                            <div class="task-details">
+                                <div class="task-name" style="color: var(--danger);">Security audit report</div>
+                                <div class="task-info">
+                                    <span>🏢 Mobile App Banking</span>
+                                    <span style="color: var(--danger);">⚠️ Quá hạn 2 ngày</span>
+                                    <span>🔴 Ưu tiên cao</span>
+                                    <span>🏷️ Security</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button class="action-btn">✏️</button>
+                                <button class="action-btn">👁️</button>
+                                <button class="action-btn">✅</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
                 <div id="reports" class="tab-pane">
                     <h2>Reports Tab - DevE sẽ implement</h2>
                 </div>
