@@ -63,12 +63,41 @@ document.addEventListener('DOMContentLoaded', () => {
         card.addEventListener('click', () => {
             const projectName = card.getAttribute('data-project-name');
             if (projectName) {
-                alert(Opening project: ${projectName});
+                alert(`Opening project: ${projectName}`);
             }
         });
     });
 });
 
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Task checkbox toggle
+    const checkboxes = document.querySelectorAll('.task-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('click', () => {
+            checkbox.classList.toggle('checked');
+            const taskItem = checkbox.closest('.task-item');
+            const taskName = taskItem.querySelector('.task-name');
+            if (checkbox.classList.contains('checked')) {
+                taskName.style.textDecoration = 'line-through';
+                taskName.style.opacity = '0.6';
+            } else {
+                taskName.style.textDecoration = 'none';
+                taskName.style.opacity = '1';
+            }
+        });
+    });
+    
+    // Filter chips
+    const filterChips = document.querySelectorAll('.filter-chip');
+    filterChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            filterChips.forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+        });
+    });
+});
 function setupDragAndDrop() {
     let draggedElement = null;
     const draggables = document.querySelectorAll('[draggable="true"]');
