@@ -1,0 +1,17 @@
+pyproject.toml
+clients/__init__.py
+clients/aiohttp.py
+clients/mongo_client.py
+configs/__init__.py
+configs/mongo_config.py
+core_and_foundation.egg-info/PKG-INFO
+core_and_foundation.egg-info/SOURCES.txt
+core_and_foundation.egg-info/dependency_links.txt
+core_and_foundation.egg-info/requires.txt
+core_and_foundation.egg-info/top_level.txt
+mongo/schemas.py
+services/base_singleton.py
+services/http_request.py
+utils/__init__.py
+utils/hasher.py
+utils/timestamp.py

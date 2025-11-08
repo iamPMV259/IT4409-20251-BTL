@@ -1,0 +1,3 @@
+mongo:
+  uri: "mongodb://mongodb:mongodb@131.153.239.187:27057/"
+  db_name: "project_management"
