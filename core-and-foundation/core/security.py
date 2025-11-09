@@ -1,23 +1,17 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+from dotenv import load_dotenv
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+_ = load_dotenv()
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Security
-SECRET_KEY: str
-ALGORITHM: str = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
 
-
-# Password Requirements
-MIN_PASSWORD_LENGTH: int = 8
-REQUIRE_SPECIAL_CHAR: bool = True
-REQUIRE_UPPERCASE: bool = True
-REQUIRE_NUMBER: bool = True
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -57,16 +51,16 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    if len(password) < MIN_PASSWORD_LENGTH:
-        return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
-    
-    if REQUIRE_UPPERCASE and not any(c.isupper() for c in password):
+    if len(password) < os.getenv("MIN_PASSWORD_LENGTH"):
+        return False, f"Password must be at least {os.getenv('MIN_PASSWORD_LENGTH')} characters long"
+
+    if os.getenv("REQUIRE_UPPERCASE") and not any(c.isupper() for c in password):
         return False, "Password must contain at least one uppercase letter"
-    
-    if REQUIRE_NUMBER and not any(c.isdigit() for c in password):
+
+    if os.getenv("REQUIRE_NUMBER") and not any(c.isdigit() for c in password):
         return False, "Password must contain at least one number"
-    
-    if REQUIRE_SPECIAL_CHAR:
+
+    if os.getenv("REQUIRE_SPECIAL_CHAR"):
         special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
         if not any(c in special_chars for c in password):
             return False, "Password must contain at least one special character"
@@ -93,12 +87,12 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+            minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
         )
     
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(claims=to_encode, key=SECRET_KEY, algorithm=ALGORITHM)
-    
+    encoded_jwt = jwt.encode(claims=to_encode, key=os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
+
     return encoded_jwt
 
 
@@ -115,8 +109,8 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(
             token, 
-            key=SECRET_KEY, 
-            algorithms=[ALGORITHM]
+            key=os.getenv("SECRET_KEY"), 
+            algorithms=[os.getenv("ALGORITHM")]
         )
         return payload
     except JWTError:
