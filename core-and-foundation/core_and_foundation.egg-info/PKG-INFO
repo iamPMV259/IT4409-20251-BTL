@@ -16,8 +16,12 @@ Requires-Dist: opentelemetry-exporter-otlp-proto-grpc==1.33.1
 Requires-Dist: opentelemetry-instrumentation-fastapi==0.54b1
 Requires-Dist: opentelemetry-instrumentation-logging==0.54b1
 Requires-Dist: opentelemetry-instrumentation-aiohttp-client==0.54b1
-Requires-Dist: ujson==5.10.0
 Requires-Dist: beanie>=2.0.0
 Requires-Dist: pymongo>=4.14.1
 Requires-Dist: dotenv>=0.9.9
 Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: motor>=3.7.1
+Requires-Dist: pydantic[email,settings]>=2.12.4
+Requires-Dist: python-jose>=3.5.0
+Requires-Dist: passlib>=1.7.4
+Requires-Dist: ujson>=5.11.0
