@@ -124,8 +124,157 @@
                     <h2>My Tasks Tab - DevD sẽ implement</h2>
                 </div>
                 <div id="reports" class="tab-pane">
-                    <h2>Reports Tab - DevE sẽ implement</h2>
+                    <div class="my-tasks-header">
+                        <h2>Báo Cáo & Theo Dõi</h2>
+                        <div class="filters">
+                            <select class="filter-btn">
+                                <option>Sprint hiện tại</option>
+                                <option>Sprint trước</option>
+                                <option>Q4 2024</option>
+                            </select>
+                            <button class="btn btn-primary">
+                                <span>📊</span>
+                                <span>Tùy chỉnh báo cáo</span>
+                            </button>
+                        </div>
+                    </div>
+                
+                    <div class="reports-grid">
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Burndown Chart</div>
+                                <span>📈</span>
+                            </div>
+                            <div class="chart-container">
+                                <div class="chart-bar">
+                                    <div class="bar" style="height: 90%;">
+                                        <span class="bar-label">T2</span>
+                                    </div>
+                                    <div class="bar" style="height: 75%;">
+                                        <span class="bar-label">T3</span>
+                                    </div>
+                                    <div class="bar" style="height: 60%;">
+                                        <span class="bar-label">T4</span>
+                                    </div>
+                                    <div class="bar" style="height: 45%;">
+                                        <span class="bar-label">T5</span>
+                                    </div>
+                                    <div class="bar" style="height: 30%;">
+                                        <span class="bar-label">T6</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Task by Status</div>
+                                <span>📊</span>
+                            </div>
+                            <div class="chart-container">
+                                <div class="chart-bar">
+                                    <div class="bar" style="height: 40%; background: #94a3b8;">
+                                        <span class="bar-label">Backlog</span>
+                                    </div>
+                                    <div class="bar" style="height: 30%; background: #3b82f6;">
+                                        <span class="bar-label">To Do</span>
+                                    </div>
+                                    <div class="bar" style="height: 50%; background: #f59e0b;">
+                                        <span class="bar-label">Progress</span>
+                                    </div>
+                                    <div class="bar" style="height: 20%; background: #8b5cf6;">
+                                        <span class="bar-label">Review</span>
+                                    </div>
+                                    <div class="bar" style="height: 80%; background: #10b981;">
+                                        <span class="bar-label">Done</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Team Velocity</div>
+                                <span>⚡</span>
+                            </div>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-number">42</div>
+                                    <div class="stat-desc">Story Points/Sprint</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-number">85%</div>
+                                    <div class="stat-desc">Completion Rate</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-number">3.5</div>
+                                    <div class="stat-desc">Avg Days/Task</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-number">12</div>
+                                    <div class="stat-desc">Tasks Completed</div>
+                                </div>
+                            </div>
+                        </div>
+                
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Progress by Team</div>
+                                <span>👥</span>
+                            </div>
+                            <div style="padding: 10px 0;">
+                                <div style="margin-bottom: 15px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>Frontend Team</span>
+                                        <span>75%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 75%;"></div>
+                                    </div>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>Backend Team</span>
+                                        <span>60%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 60%;"></div>
+                                    </div>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>QA Team</span>
+                                        <span>45%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 45%;"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>DevOps</span>
+                                        <span>90%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 90%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="export-section">
+                        <button class="btn btn-primary">
+                            <span>📥</span>
+                            <span>Export CSV</span>
+                        </button>
+                        <button class="btn" style="margin-left: 10px;">
+                            <span>📄</span>
+                            <span>Generate PDF Report</span>
+                        </button>
+                    </div>
                 </div>
+                
             </div>
         </div>
     </div>
