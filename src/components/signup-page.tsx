@@ -4,34 +4,67 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
+import { authApi } from '../lib/api';
+import { useAuth } from '../context/auth-context';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface SignUpPageProps {
-  onSignUp: () => void;
   onNavigate: (page: string) => void;
+  // onSignUp prop cũ có thể bỏ hoặc giữ để tương thích ngược, nhưng logic chính nằm ở context
+  onSignUp?: () => void; 
 }
 
-export function SignUpPage({ onSignUp, onNavigate }: SignUpPageProps) {
+export function SignUpPage({ onNavigate }: SignUpPageProps) {
+  const { login } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSignUp();
+    
+    if (password.length < 6) {
+        toast.error("Mật khẩu phải có ít nhất 6 ký tự");
+        return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 1. Gọi API đăng ký
+      await authApi.register(name, email, password);
+      toast.success("Đăng ký thành công! Đang đăng nhập...");
+
+      // 2. Tự động đăng nhập sau khi đăng ký thành công
+      const { data } = await authApi.login(email, password);
+      
+      // 3. Lưu token vào context -> App sẽ tự chuyển sang màn hình chính
+      login(data.token, data.user);
+      
+    } catch (error: any) {
+      console.error(error);
+      // Hiển thị lỗi chi tiết từ backend nếu có
+      const message = error.response?.data?.message || "Đăng ký thất bại. Vui lòng thử lại.";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <AuthLayout title="Create your account" subtitle="Get started with TaskFlow today">
+    <AuthLayout title="Tạo tài khoản mới" subtitle="Bắt đầu quản lý công việc với TaskFlow">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+          <Label htmlFor="name">Họ và tên</Label>
           <Input
             id="name"
             type="text"
-            placeholder="John Doe"
+            placeholder="Nguyễn Văn A"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
+            disabled={isLoading}
           />
         </div>
 
@@ -40,15 +73,16 @@ export function SignUpPage({ onSignUp, onNavigate }: SignUpPageProps) {
           <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder="ban@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={isLoading}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Mật khẩu</Label>
           <Input
             id="password"
             type="password"
@@ -56,18 +90,20 @@ export function SignUpPage({ onSignUp, onNavigate }: SignUpPageProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={isLoading}
           />
-          <p className="text-slate-500">Must be at least 8 characters</p>
+          <p className="text-xs text-slate-500">Ít nhất 6 ký tự</p>
         </div>
 
-        <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-          Create account
+        <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isLoading ? 'Đang tạo tài khoản...' : 'Đăng ký'}
         </Button>
 
         <div className="relative">
           <Separator className="my-4" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-slate-500">
-            or
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-slate-500 text-xs">
+            hoặc
           </span>
         </div>
 
@@ -75,7 +111,8 @@ export function SignUpPage({ onSignUp, onNavigate }: SignUpPageProps) {
           type="button"
           variant="outline"
           className="w-full"
-          onClick={onSignUp}
+          onClick={() => toast.info("Tính năng đăng nhập Google đang phát triển")}
+          disabled={isLoading}
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path
@@ -95,17 +132,18 @@ export function SignUpPage({ onSignUp, onNavigate }: SignUpPageProps) {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Sign up with Google
+          Đăng ký bằng Google
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-slate-600">
-        Already have an account?{' '}
+      <p className="mt-6 text-center text-slate-600 text-sm">
+        Đã có tài khoản?{' '}
         <button
           onClick={() => onNavigate('login')}
-          className="text-blue-600 hover:text-blue-700 transition-colors"
+          className="text-blue-600 hover:text-blue-700 transition-colors font-medium"
+          disabled={isLoading}
         >
-          Sign in
+          Đăng nhập
         </button>
       </p>
     </AuthLayout>

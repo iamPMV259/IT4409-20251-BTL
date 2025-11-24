@@ -4,25 +4,56 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
+import { authApi } from '../lib/api';
+import { useAuth } from '../context/auth-context';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: () => void;
   onNavigate: (page: string) => void;
 }
 
-export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
+export function LoginPage({ onNavigate }: LoginPageProps) {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    
+    if (!email || !password) {
+      toast.error("Vui lòng nhập đầy đủ email và mật khẩu");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 1. Gọi API đăng nhập
+      const response = await authApi.login(email, password);
+      
+      // 2. Thông báo thành công
+      toast.success('Đăng nhập thành công');
+
+      // 3. Cập nhật Context (Lưu token & user)
+      // App.tsx sẽ tự động re-render và chuyển sang MainLayout
+      login(response.data.token, response.data.user);
+
+    } catch (error: any) {
+      console.error("Login error:", error);
+      // Lấy thông báo lỗi từ backend nếu có
+      const message = error.response?.data?.message || 'Email hoặc mật khẩu không chính xác';
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to your account to continue"
+      title="Chào mừng trở lại"
+      subtitle="Đăng nhập vào tài khoản của bạn để tiếp tục"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
@@ -30,22 +61,24 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
           <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder="ban@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={isLoading}
           />
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">Mật khẩu</Label>
             <button
               type="button"
               onClick={() => onNavigate('forgot-password')}
-              className="text-blue-600 hover:text-blue-700 transition-colors"
+              className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+              disabled={isLoading}
             >
-              Forgot?
+              Quên mật khẩu?
             </button>
           </div>
           <Input
@@ -55,17 +88,29 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={isLoading}
           />
         </div>
 
-        <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-          Sign in
+        <Button 
+          type="submit" 
+          className="w-full bg-blue-600 hover:bg-blue-700"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Đang đăng nhập...
+            </>
+          ) : (
+            'Đăng nhập'
+          )}
         </Button>
 
         <div className="relative">
           <Separator className="my-4" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-slate-500">
-            or
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-slate-500 text-xs">
+            hoặc
           </span>
         </div>
 
@@ -73,7 +118,8 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
           type="button"
           variant="outline"
           className="w-full"
-          onClick={onLogin}
+          onClick={() => toast.info("Tính năng đăng nhập Google đang phát triển")}
+          disabled={isLoading}
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path
@@ -93,17 +139,18 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Continue with Google
+          Tiếp tục với Google
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-slate-600">
-        Don't have an account?{' '}
+      <p className="mt-6 text-center text-slate-600 text-sm">
+        Chưa có tài khoản?{' '}
         <button
           onClick={() => onNavigate('signup')}
-          className="text-blue-600 hover:text-blue-700 transition-colors"
+          className="text-blue-600 hover:text-blue-700 transition-colors font-medium"
+          disabled={isLoading}
         >
-          Sign up
+          Đăng ký ngay
         </button>
       </p>
     </AuthLayout>
