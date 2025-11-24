@@ -8,4 +8,7 @@
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
+
+
+  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/vinhbc16/fe_cnw)
   
