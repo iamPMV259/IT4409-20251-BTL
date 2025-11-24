@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.router import authentication, workspaces
 from clients import Clients
 from configs import get_logger
+from websockket import manager
+from websockket import router as websocket_router
 
 mongo_clients = Clients().get_mongo_client()
 logger = get_logger("api-main")
@@ -39,6 +41,7 @@ app.add_middleware(
 
 app.include_router(authentication.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
+app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
 
 
 @app.get(path="/", summary="Health Check", tags=["Health"])
@@ -58,14 +61,17 @@ async def root():
         "developer": "Phung Minh Vu - 20235252"
     }
 
-@app.get(path="/health", tags=["Health"])
-async def health_check():
-    """
-    Health check endpoint
-    """
+@app.get("/health")
+async def health():
     return {
         "status": "healthy",
-        "database": "connected"
+        "api": "running",
+        "database": "connected",
+        "websocket": {
+            "active_connections": manager.get_connection_count(),
+            "total_users": len(manager.user_connections),
+            "total_rooms": len(manager.project_rooms)
+        }
     }
 
 if __name__ == "__main__":
@@ -74,6 +80,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app="api.main:app",
         host="0.0.0.0",
-        port=8234,
+        port=8345,
         reload=True,
     )

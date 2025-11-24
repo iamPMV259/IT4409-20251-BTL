@@ -26,3 +26,8 @@ utils/hasher.py
 utils/timestamp.py
 utils/user_models.py
 utils/workspace_model.py
+websockket/__init__.py
+websockket/connection_manager.py
+websockket/event_handler.py
+websockket/routes.py
+websockket/utils.py
