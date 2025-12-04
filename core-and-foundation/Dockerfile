@@ -60,4 +60,5 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Expose the port that the application listens on.
 EXPOSE 8000
 
-CMD ["uv", "run", "-m", "api.main"]
+# CMD ["uv", "run", "-m", "api.main"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"] 
