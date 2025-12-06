@@ -54,7 +54,8 @@ async def root():
         "version": "1.0.0",
         "modules": [
             "Module 1: Authentication & User Management",
-            "Module 2: Workspace Management"
+            "Module 2: Workspace Management",
+            "Module 3: Tasks Management"
         ],
         "docs": "/docs",
         "developer": "Phung Minh Vu - 20235252"
