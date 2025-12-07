@@ -5,14 +5,14 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
+#from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from pydantic import BaseModel
 
 from .mongo_config import MongoConfig
 
 # HACK: This service needs to initialize the logging instrumentor before any logging is done.
 # Still not sure why this service has to do this.
-LoggingInstrumentor().instrument(set_logging_format=True)
+#LoggingInstrumentor().instrument(set_logging_format=True)
 
 _ = load_dotenv()
 
