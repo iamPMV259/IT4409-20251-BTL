@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.router import authentication, workspaces
+from api.router import authentication, workspaces, tasks
+from websocket.router import router as ws_router
 from clients import Clients
 from configs import get_logger
 
@@ -39,6 +40,8 @@ app.add_middleware(
 
 app.include_router(authentication.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
+app.include_router(tasks.router, prefix="/api/v1/tasks")
+app.include_router(ws_router)
 
 
 @app.get(path="/", summary="Health Check", tags=["Health"])
@@ -52,7 +55,8 @@ async def root():
         "version": "1.0.0",
         "modules": [
             "Module 1: Authentication & User Management",
-            "Module 2: Workspace Management"
+            "Module 2: Workspace Management",
+            "Module 3: Tasks Management"
         ],
         "docs": "/docs",
         "developer": "Phung Minh Vu - 20235252"

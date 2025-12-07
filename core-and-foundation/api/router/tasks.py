@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from uuid import UUID
+from websocket import ws_manager
 
 from fastapi import APIRouter, Depends, Query, status
 
@@ -121,7 +122,19 @@ async def create_task(
         createdAt=new_task.createdAt,
         updatedAt=new_task.updatedAt
     )
+ #Realtime broadcast: sever:task_created
+ #Broadcast to all clients connected to this workspace
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_created",
+            task_response.model_dump()
+        )
+    except Exception:
+        # do not break API if broadcasting fails; optional: log the exception
+        pass
 
+    return task_response
 
 @router.get(
     "/tasks/{task_id}",
@@ -236,6 +249,17 @@ async def update_task(
         updatedAt=task.updatedAt
     )
 
+    # REALTIME BROADCAST: server:task_updated
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            task_response.model_dump()
+        )
+    except Exception:
+        pass
+
+    return task_response
 
 @router.patch(
     "/tasks/{task_id}/move",
@@ -326,6 +350,22 @@ async def move_task(
         updatedAt=task.updatedAt
     )
 
+    # REALTIME BROADCAST: server:task_moved
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_moved",
+            {
+                "taskId": str(task.id),
+                "sourceColumnId": str(old_column_id),
+                "destColumnId": str(new_column_id),
+                "newPosition": move_data.position
+            }
+        )
+    except Exception:
+        pass
+
+    return task_response
 
 @router.delete(
     "/tasks/{task_id}",
@@ -371,6 +411,20 @@ async def delete_task(
         details={"task_title": task.title}
     )
     await activity.insert()
+
+    # REALTIME BROADCAST: server:task_deleted
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_deleted",
+            {
+                "taskId": str(task.id),
+                "columnId": str(task.columnId)
+            }
+        )
+    except Exception:
+        pass
+
     
     # Delete task
     await task.delete()
@@ -450,6 +504,17 @@ async def add_assignee(
         updatedAt=task.updatedAt
     )
 
+# OPTIONAL: broadcast task_updated because assignees changed
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            task_response.model_dump()
+        )
+    except Exception:
+        pass
+
+    return task_response
 
 @router.delete(
     "/tasks/{task_id}/assignees/{user_id}",
@@ -514,6 +579,17 @@ async def remove_assignee(
         updatedAt=task.updatedAt
     )
 
+    # OPTIONAL: broadcast task_updated because assignees changed
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            task_response.model_dump()
+        )
+    except Exception:
+        pass
+
+    return task_response
 
 @router.post(
     "/tasks/{task_id}/labels",
@@ -587,6 +663,17 @@ async def add_label(
         updatedAt=task.updatedAt
     )
 
+    # OPTIONAL: broadcast task_updated because labels changed
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            task_response.model_dump()
+        )
+    except Exception:
+        pass
+
+    return task_response
 
 @router.post(
     "/tasks/{task_id}/comments",
@@ -645,6 +732,18 @@ async def add_comment(
         content=new_comment.content,
         createdAt=new_comment.createdAt
     )
+
+    # REALTIME BROADCAST: server:comment_added
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:comment_added",
+            comment_response.model_dump()
+        )
+    except Exception:
+        pass
+
+    return comment_response
 
 
 @router.post(
@@ -705,6 +804,32 @@ async def add_checklist_item(
         text=new_item.text,
         checked=new_item.checked
     )
+
+     # OPTIONAL: broadcast task_updated because checklist changed
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            TaskResponse(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                projectId=task.projectId,
+                columnId=task.columnId,
+                creatorId=task.creatorId,
+                assignees=task.assignees,
+                dueDate=task.dueDate,
+                labels=task.labels,
+                checklists=task.checklists,
+                createdAt=task.createdAt,
+                updatedAt=task.updatedAt
+            ).model_dump()
+        )
+    except Exception:
+        pass
+
+    return item_response
+
 
 
 @router.patch(
@@ -770,6 +895,32 @@ async def update_checklist_item(
         text=task.checklists[item_index].text,
         checked=task.checklists[item_index].checked
     )
+
+    # OPTIONAL: broadcast task_updated because checklist changed
+    try:
+        await ws_manager.broadcast_to_workspace(
+            str(workspace.id),
+            "server:task_updated",
+            TaskResponse(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                projectId=task.projectId,
+                columnId=task.columnId,
+                creatorId=task.creatorId,
+                assignees=task.assignees,
+                dueDate=task.dueDate,
+                labels=task.labels,
+                checklists=task.checklists,
+                createdAt=task.createdAt,
+                updatedAt=task.updatedAt
+            ).model_dump()
+        )
+    except Exception:
+        pass
+
+    return item_response
+
 
 
 # ==================== MODULE 6: MY TASKS API ====================
