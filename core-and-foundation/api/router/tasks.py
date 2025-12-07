@@ -35,7 +35,7 @@ from utils.task_models import (
     MyTasksFilter,
 )
 
-router = APIRouter(prefix="/api/v1", tags=["Tasks"])
+router = APIRouter(tags=["Tasks"])
 
 
 # ==================== MODULE 5: TASKS API ====================
@@ -108,7 +108,7 @@ async def create_task(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response = TaskResponse(
         id=new_task.id,
         title=new_task.title,
         description=new_task.description,
@@ -123,18 +123,17 @@ async def create_task(
         updatedAt=new_task.updatedAt
     )
  #Realtime broadcast: sever:task_created
- #Broadcast to all clients connected to this workspace
-    try:
-        await ws_manager.broadcast_to_workspace(
+ #broadcast realtime do not block API
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_created",
             task_response.model_dump()
         )
-    except Exception:
-        # do not break API if broadcasting fails; optional: log the exception
-        pass
+    )
 
     return task_response
+
 
 @router.get(
     "/tasks/{task_id}",
@@ -234,7 +233,7 @@ async def update_task(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response =  TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -250,16 +249,16 @@ async def update_task(
     )
 
     # REALTIME BROADCAST: server:task_updated
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             task_response.model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return task_response
+
 
 @router.patch(
     "/tasks/{task_id}/move",
@@ -335,7 +334,7 @@ async def move_task(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response = TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -351,8 +350,8 @@ async def move_task(
     )
 
     # REALTIME BROADCAST: server:task_moved
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_moved",
             {
@@ -362,10 +361,10 @@ async def move_task(
                 "newPosition": move_data.position
             }
         )
-    except Exception:
-        pass
+    )
 
     return task_response
+
 
 @router.delete(
     "/tasks/{task_id}",
@@ -413,8 +412,8 @@ async def delete_task(
     await activity.insert()
 
     # REALTIME BROADCAST: server:task_deleted
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_deleted",
             {
@@ -422,14 +421,13 @@ async def delete_task(
                 "columnId": str(task.columnId)
             }
         )
-    except Exception:
-        pass
+    )
 
-    
     # Delete task
     await task.delete()
-    
+
     return None
+
 
 
 @router.post(
@@ -489,7 +487,7 @@ async def add_assignee(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response = TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -504,17 +502,17 @@ async def add_assignee(
         updatedAt=task.updatedAt
     )
 
-# OPTIONAL: broadcast task_updated because assignees changed
-    try:
-        await ws_manager.broadcast_to_workspace(
+    # OPTIONAL: broadcast task_updated because assignees changed
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             task_response.model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return task_response
+
 
 @router.delete(
     "/tasks/{task_id}/assignees/{user_id}",
@@ -564,7 +562,7 @@ async def remove_assignee(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response = TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -580,16 +578,16 @@ async def remove_assignee(
     )
 
     # OPTIONAL: broadcast task_updated because assignees changed
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             task_response.model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return task_response
+
 
 @router.post(
     "/tasks/{task_id}/labels",
@@ -648,7 +646,7 @@ async def add_label(
     )
     await activity.insert()
     
-    return TaskResponse(
+    task_response = TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -664,16 +662,16 @@ async def add_label(
     )
 
     # OPTIONAL: broadcast task_updated because labels changed
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             task_response.model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return task_response
+
 
 @router.post(
     "/tasks/{task_id}/comments",
@@ -725,7 +723,7 @@ async def add_comment(
     )
     await activity.insert()
     
-    return CommentResponse(
+    comment_response = CommentResponse(
         id=new_comment.id,
         taskId=new_comment.taskId,
         userId=new_comment.userId,
@@ -734,16 +732,16 @@ async def add_comment(
     )
 
     # REALTIME BROADCAST: server:comment_added
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:comment_added",
             comment_response.model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return comment_response
+
 
 
 @router.post(
@@ -800,14 +798,14 @@ async def add_checklist_item(
     await activity.insert()
     
     # Return the newly created item (last item in the list)
-    return ChecklistItemResponse(
+    item_response = ChecklistItemResponse(
         text=new_item.text,
         checked=new_item.checked
     )
 
      # OPTIONAL: broadcast task_updated because checklist changed
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             TaskResponse(
@@ -825,8 +823,7 @@ async def add_checklist_item(
                 updatedAt=task.updatedAt
             ).model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return item_response
 
@@ -890,15 +887,15 @@ async def update_checklist_item(
         }
     )
     await activity.insert()
-    
-    return ChecklistItemResponse(
+    #Build response
+    item_response = ChecklistItemResponse(
         text=task.checklists[item_index].text,
         checked=task.checklists[item_index].checked
     )
 
     # OPTIONAL: broadcast task_updated because checklist changed
-    try:
-        await ws_manager.broadcast_to_workspace(
+    asyncio.create_task(
+        ws_manager.broadcast_to_workspace(
             str(workspace.id),
             "server:task_updated",
             TaskResponse(
@@ -916,10 +913,10 @@ async def update_checklist_item(
                 updatedAt=task.updatedAt
             ).model_dump()
         )
-    except Exception:
-        pass
+    )
 
     return item_response
+
 
 
 

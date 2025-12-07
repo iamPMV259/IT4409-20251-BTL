@@ -43,7 +43,7 @@ app.add_middleware(
 app.include_router(authentication.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
-app.include_router(tasks.router, prefix="/api/v1/tasks")
+app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(ws_router)
 
 
