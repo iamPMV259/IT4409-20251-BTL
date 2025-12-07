@@ -1,9 +1,0 @@
-api
-clients
-configs
-core
-hooks
-mongo
-services
-utils
-websockket
