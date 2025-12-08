@@ -28,7 +28,8 @@ const UserSchema = new mongoose.Schema({
     },
 
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'users' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('User', UserSchema);

@@ -1,4 +1,4 @@
-
+// src/models/Workspace.js
 const mongoose = require('mongoose');
 
 const WorkspaceSchema = new mongoose.Schema({
@@ -22,7 +22,8 @@ const WorkspaceSchema = new mongoose.Schema({
     ref: 'User',
   }],
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'workspaces' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Workspace', WorkspaceSchema);

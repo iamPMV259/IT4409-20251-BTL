@@ -1,4 +1,4 @@
-// src/models/Column.js
+// src/models/Columns.js
 const mongoose = require('mongoose');
 
 const ColumnSchema = new mongoose.Schema({
@@ -23,7 +23,8 @@ const ColumnSchema = new mongoose.Schema({
         ref: 'Task',
     }],
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'columns' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Column', ColumnSchema);

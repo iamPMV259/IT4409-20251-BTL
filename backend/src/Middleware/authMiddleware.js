@@ -11,26 +11,38 @@ exports.protect = async (req, res, next) => {
         token = req.headers.authorization.split(' ')[1];
     }
 
+    // If no token found, return error immediately
+    if (!token) {
+        return res.status(401).json({ 
+            success: false, 
+            message: 'Not authorized, no token' 
+        });
+    }
+
     try {
-        // Step 2: Verify token signature & expiration
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        // Step 2: Verify token signature & expiration with HS256 algorithm
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+            algorithms: [process.env.JWT_ALGORITHM || 'HS256']
+        });
         
         // Step 3: Fetch user from database (exclude password)
         req.user = await User.findById(decoded.id).select('-passwordHash');
         
+        if (!req.user) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
+        }
+        
         next();  // ← Allow request to proceed
 
     } catch (error) {
-        res.status(401).json({ 
+        console.error('JWT Verification Error:', error.message);
+        return res.status(401).json({ 
             success: false, 
-            message: 'Not authorized, token failed' 
-        });
-    }
-
-    if (!token) {
-        res.status(401).json({ 
-            success: false, 
-            message: 'Not authorized, no token' 
+            message: 'Not authorized, token failed',
+            error: error.message
         });
     }
 };
