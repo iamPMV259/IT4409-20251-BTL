@@ -1,4 +1,4 @@
-// src/models/Project.js
+// src/models/Projects.js
 const mongoose = require('mongoose');
 
 const ProjectSchema = new mongoose.Schema({
@@ -55,7 +55,8 @@ const ProjectSchema = new mongoose.Schema({
     },
   },
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'projects' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Project', ProjectSchema);

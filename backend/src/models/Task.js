@@ -62,7 +62,8 @@ const TaskSchema = new mongoose.Schema({
     }],
     checklists: [ChecklistItemSchema],
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'tasks' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Task', TaskSchema);

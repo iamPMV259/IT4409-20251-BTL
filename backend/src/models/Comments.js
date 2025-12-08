@@ -1,4 +1,4 @@
-// src/models/Comment.js
+// src/models/Comments.js
 const mongoose = require('mongoose');
 
 const CommentSchema = new mongoose.Schema({
@@ -22,7 +22,8 @@ const CommentSchema = new mongoose.Schema({
     required: [true, 'Comment content cannot be empty'],
   },
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'comments' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Comment', CommentSchema);

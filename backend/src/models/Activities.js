@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 const ActivitySchema = new mongoose.Schema({
@@ -32,7 +31,8 @@ const ActivitySchema = new mongoose.Schema({
         // Ví dụ: { fromColumn: 'Todo', toColumn: 'In Progress' }
     },
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'activities' // Explicitly set collection name to match MongoDB
 });
 
 module.exports = mongoose.model('Activity', ActivitySchema);
