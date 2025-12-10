@@ -13,6 +13,7 @@ pyright_check.json
 
 # Virtual environments
 .venv
+venv/
 
 # Testing files
 test.py
