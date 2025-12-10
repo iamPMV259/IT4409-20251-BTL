@@ -51,7 +51,7 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    if len(password) < os.getenv("MIN_PASSWORD_LENGTH"):
+    if len(password) < int(os.getenv("MIN_PASSWORD_LENGTH")):
         return False, f"Password must be at least {os.getenv('MIN_PASSWORD_LENGTH')} characters long"
 
     if os.getenv("REQUIRE_UPPERCASE") and not any(c.isupper() for c in password):
