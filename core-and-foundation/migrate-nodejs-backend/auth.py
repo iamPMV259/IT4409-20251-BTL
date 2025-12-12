@@ -1,7 +1,7 @@
 import aiohttp
 
 from configs import get_logger, nodejs_backend_config
-from hooks.http_errors import BadRequestError
+from hooks.http_errors import AuthenticationError, BadRequestError, InternalServerError
 
 logger = get_logger("nodejs-backend-auth")
 
@@ -19,7 +19,15 @@ async def login_to_get_token(email: str, password: str) -> str:
                 token = data.get("token")
                 logger.info("Login successful.")
                 return token
-            else:
+            elif response.status == 401:
                 error_message = await response.text()
                 logger.error(f"Login failed: {error_message}")
+                raise AuthenticationError(f"Login failed with status {response.status}: {error_message}")
+            elif response.status == 400:
+                error_message = await response.text()
+                logger.error(f"Bad request during login: {error_message}")
                 raise BadRequestError(f"Login failed with status {response.status}: {error_message}")
+            else:
+                error_message = await response.text()
+                logger.error(f"Internal server error during login: {error_message}")
+                raise InternalServerError(f"Login failed with status {response.status}: {error_message}")
