@@ -229,47 +229,46 @@ const updateProject = async (req, res) => {
     }
 }
 
+/**
+ * @desc Delete a project and all related data
+ * @route DELETE /api/v1/projects/:projectId
+ */
 const deleteProject = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+    // ⚠️ Đã bỏ Transaction do MongoDB server không hỗ trợ Replica Set
     try {
         const { projectId } = req.params;
         const userId = req.user._id;
 
-        const project = await Project.findById(projectId).session(session);
+        // 1. Tìm Project
+        const project = await Project.findById(projectId);
 
         if (!project) {
-            await session.abortTransaction();
-            session.endSession();
             return res.status(404).json({ success: false, message: 'Project not found.' });
         }
 
+        // 2. Check quyền Owner
         if (!areIdsEqual(project.ownerId, userId)) {
-            await session.abortTransaction();
-            session.endSession();
             return res.status(403).json({ success: false, message: 'Only the project owner can delete the project.' });
         }
 
-        await Column.deleteMany({ projectId }, { session });
-        await Task.deleteMany({ projectId }, { session });
-        await Activity.deleteMany({ projectId }, { session });
+        // 3. Xóa dữ liệu liên quan (Cascade Delete)
+        // Không dùng { session } nữa
+        await Column.deleteMany({ projectId });
+        await Task.deleteMany({ projectId });
+        await Activity.deleteMany({ projectId });
         
-        await Project.deleteOne({ _id: projectId }, { session });
+        // 4. Xóa Project
+        await Project.deleteOne({ _id: projectId });
 
-        await session.commitTransaction();
-        session.endSession();
-
+        // 5. Trả về thành công
         res.status(200).json({
             success: true,
             message: 'Project and all related data deleted successfully.',
         });
 
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('Error during project deletion transaction:', error);
-        res.status(500).json({ success: false, message: 'Transaction failed.' });
+        console.error('Error during project deletion:', error);
+        res.status(500).json({ success: false, message: 'Delete failed.', error: error.message });
     }
 };
 

@@ -200,6 +200,7 @@ class ProjectGetData(BaseModel):
     status: str
     task_stats: TaskStats
     created_at: datetime
+    deadline: Optional[datetime] = None
     updated_at: datetime
 
     @field_validator("id", "workspace_id", mode="before")
@@ -247,6 +248,8 @@ class ProjectGetResponse(BaseModel):
 class ProjectCreateRequest(BaseModel):
     name: str
     description: str
+    deadline: Optional[datetime] = None
+
 
 async def create_project(workspace_id: str, project_data: ProjectCreateRequest, token: str) -> ProjectCreatedResponse:
     url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/workspaces/{workspace_id}/projects"
@@ -310,3 +313,5 @@ async def get_projects(workspace_id: str, token: str) -> ProjectGetResponse:
                 error_message = await response.text()
                 logger.error(f"Failed to retrieve projects: {error_message}")
                 raise InternalServerError(f"Retrieval failed with status {response.status}: {error_message}")
+
+
