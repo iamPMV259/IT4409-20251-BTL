@@ -56,11 +56,16 @@ const createProject = async (req, res) => {
         const { workspaceId } = req.params;
         const { name, description, members } = req.body;
         const userId = req.user._id;
+        
         // precheck: ensure the user is the owner or admin or the workspace
         const workspace = await Workspace.findById(workspaceId);
-        if (!workspace || !workspace.ownerId.equals(userId)) {
-            return res.status(403).json({ success: false, message: "only workspace owners can create new projects " });
+        
+        // --- SỬA LỖI TẠI ĐÂY ---
+        // Chuyển về string để so sánh cho an toàn, tránh lỗi .equals is not a function
+        if (!workspace || workspace.ownerId.toString() !== userId.toString()) {
+            return res.status(403).json({ success: false, message: "Only workspace owners can create new projects" });
         }
+        
         // 2. create the Project Document
         const projectId = generateUUID();
         const newProject = await Project.create({
@@ -74,8 +79,10 @@ const createProject = async (req, res) => {
             taskStats: { open: 0, closed: 0 }
 
         });
+        
         //3, initialize default kanban columns
-        const Column = require('../models/Columns');
+        // Lưu ý: Bạn require Model ở đây cũng được nhưng tốt nhất nên move lên đầu file
+        // const Column = require('../models/Columns'); 
         const defaultColumns = ['To Do', 'In Progress', 'Done'];
         const columnIds = [];
         const createdColumns = [];
@@ -90,13 +97,15 @@ const createProject = async (req, res) => {
             columnIds.push(columnId);
             createdColumns.push(column);
         }
+        
         // 4. Update the new Project document with the order of the create columns
         await Project.findByIdAndUpdate(projectId, {
             columnOrder: columnIds,
         }, { new: true });
+        
         res.status(201).json({
             success: true,
-            message: 'Project created adn initialized successfully',
+            message: 'Project created and initialized successfully',
             data: {
                 ...newProject.toObject(),
                 columnOrder: columnIds,
@@ -107,10 +116,10 @@ const createProject = async (req, res) => {
         console.error('Error creating project', error);
         // hanble specific mongoose validation errors
         if (error.name === 'ValidationError') {
-            const messages = Object.values(error.errors).map(val => val.massage);
+            const messages = Object.values(error.errors).map(val => val.message); // Sửa lỗi chính tả massage -> message
             return res.status(400).json({ success: false, message: messages.join(', ') });
         }
-        res.status(500).json({ success: false, message: 'Server Error duting project creation' });
+        res.status(500).json({ success: false, message: 'Server Error during project creation' });
     }
 };
 const getProjectDetail = async (req, res) => {
