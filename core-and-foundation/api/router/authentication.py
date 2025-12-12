@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from api.dependencies import get_current_user
+from configs import nodejs_backend_config
 from core.security import (
     create_access_token,
     get_password_hash,

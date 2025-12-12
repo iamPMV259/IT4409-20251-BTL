@@ -25,8 +25,12 @@ exports.protect = async (req, res, next) => {
             algorithms: [process.env.JWT_ALGORITHM || 'HS256']
         });
         
+        const userId = decoded.id || decoded.sub;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: 'Token payload invalid (no id or sub)' });
+        }
         // Step 3: Fetch user from database (exclude password)
-        req.user = await User.findById(decoded.id).select('-passwordHash');
+        req.user = await User.findById(userId).select('-passwordHash');
         
         if (!req.user) {
             return res.status(401).json({ 
