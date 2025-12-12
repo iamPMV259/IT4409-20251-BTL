@@ -30,6 +30,23 @@ if (require('fs').existsSync(envPath)) {
 // Import the central router file to mount all application routes
 const apiRoutes = require('./routes/CenterAPIRoutes');
 
+
+const os = require('os');
+
+function getServerIp() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '127.0.0.1';
+}
+
+console.log("Server IP:", getServerIp());
+
 // Swagger configuration
 const swaggerOptions = {
     definition: {
@@ -44,7 +61,7 @@ const swaggerOptions = {
         },
         servers: [
             {
-                url: `http://localhost:${process.env.PORT || 8346}/api/v1`,
+                url: `http://${getServerIp()}:${process.env.PORT || 8346}/api/v1`,
                 description: 'Development server',
             },
         ],
