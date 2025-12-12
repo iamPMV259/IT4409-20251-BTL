@@ -53,3 +53,10 @@ class BadRequestError(HTTPException):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
         )
+class InternalServerError(HTTPException):
+    """Raised when an internal server error occurs"""
+    def __init__(self, detail: str = "Internal server error"):
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
