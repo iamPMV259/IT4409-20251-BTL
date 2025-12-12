@@ -16,6 +16,9 @@ class ColumnUpdateRequest(BaseModel):
     name: str | None
     order: int | None
 
+class ColumnResponse(BaseModel):
+    success: bool
+    message: str
 
 
 
@@ -33,7 +36,7 @@ async def update_column(column_id: str, update_data: ColumnUpdateRequest, token:
             if response.status == 200:
                 data = await response.json()
                 logger.info(f"Column {column_id} updated successfully.")
-                return data
+                return ColumnResponse.model_validate(data)
             elif response.status == 401:
                 logger.error("Authentication failed while updating column.")
                 raise AuthenticationError("Invalid or expired token.")
@@ -60,7 +63,8 @@ async def delete_column(column_id: str, token: str):
         async with session.delete(url, headers=headers) as response:
             if response.status in [204, 200]:
                 logger.info(f"Column {column_id} deleted successfully.")
-                return
+                data = await response.json()
+                return ColumnResponse.model_validate(data)
             elif response.status == 401:
                 logger.error("Authentication failed while deleting column.")
                 raise AuthenticationError("Invalid or expired token.")
