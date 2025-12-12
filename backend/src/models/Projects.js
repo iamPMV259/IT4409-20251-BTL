@@ -1,6 +1,24 @@
 // src/models/Projects.js
 const mongoose = require('mongoose');
 
+// Schema phụ cho Member
+const MemberDataSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.UUID,
+        ref: 'User',
+        required: true,
+    },
+    role: {
+        type: String,
+        enum: ['owner', 'admin', 'member'],
+        default: 'member',
+    },
+}, { 
+    _id: false,
+    // Quan trọng: Áp dụng transform cho cả schema con
+    toJSON: { getters: true } 
+});
+
 const ProjectSchema = new mongoose.Schema({
   _id: {
     type: mongoose.Schema.Types.UUID,
@@ -26,10 +44,7 @@ const ProjectSchema = new mongoose.Schema({
     required: true,
   },
   // Lưu trữ IDs người dùng
-  members: [{
-    type: mongoose.Schema.Types.UUID,
-    ref: 'User',
-  }],
+  members: [MemberDataSchema],
   status: {
     type: String,
     enum: ['active', 'on-hold', 'completed'],
@@ -38,12 +53,11 @@ const ProjectSchema = new mongoose.Schema({
   deadline: {
     type: Date,
   },
-  // Mảng các ID tham chiếu đến 'columns', quyết định thứ tự các cột
+  // Mảng các ID tham chiếu đến 'columns'
   columnOrder: [{
     type: mongoose.Schema.Types.UUID,
     ref: 'Column',
   }],
-  // Mẫu tính toán (Computed Pattern) để tối ưu hóa việc đọc
   taskStats: {
     open: {
       type: Number,
@@ -56,7 +70,32 @@ const ProjectSchema = new mongoose.Schema({
   },
 }, {
   timestamps: true,
-  collection: 'projects' // Explicitly set collection name to match MongoDB
+  collection: 'projects',
+  // --- PHẦN QUAN TRỌNG MỚI THÊM ---
+  toJSON: {
+    getters: true,  // Cho phép Mongoose chạy hàm getter để convert UUID Buffer -> String
+    virtuals: true,
+    transform: (doc, ret) => {
+      // Xóa trường __v (version key) cho gọn response
+      delete ret.__v;
+      // Xóa trường id (duplicate của _id) nếu virtuals tạo ra
+      delete ret.id;
+      
+      // Fix thủ công cho các trường UUID nếu getters không tự chạy (đề phòng)
+      if (ret._id && typeof ret._id === 'object' && ret._id.toString) {
+          ret._id = ret._id.toString();
+      }
+      if (ret.workspaceId && typeof ret.workspaceId === 'object' && ret.workspaceId.toString) {
+          ret.workspaceId = ret.workspaceId.toString();
+      }
+      // Lưu ý: ownerId nếu đã populate thì nó là Object User, nếu chưa thì là UUID
+      if (ret.ownerId && typeof ret.ownerId === 'object' && ret.ownerId.constructor.name === 'Binary') {
+          ret.ownerId = ret.ownerId.toString();
+      }
+
+      return ret;
+    }
+  }
 });
 
 module.exports = mongoose.model('Project', ProjectSchema);

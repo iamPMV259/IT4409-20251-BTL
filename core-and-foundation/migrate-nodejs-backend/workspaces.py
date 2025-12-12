@@ -158,6 +158,92 @@ class ProjectCreatedResponse(BaseModel):
         super().__init__(**data)
 
 
+class OwnerInfo(BaseModel):
+    id: str
+    name: str
+    avatar_url: Optional[str] = None
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_id(cls, v):
+        if v and not cls._is_uuid(v):
+            return base64_to_uuid(v)
+        return v
+
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        return bool(uuid_pattern.match(value))
+
+    class Config:
+        populate_by_name = True
+
+    def __init__(self, **data):
+        if "_id" in data:
+            data["id"] = data.pop("_id")
+        if "avatarUrl" in data:
+            data["avatar_url"] = data.pop("avatarUrl")
+        super().__init__(**data)
+
+
+class ProjectGetData(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    workspace_id: str
+    owner: OwnerInfo
+    members: list[ProjectMember]
+    status: str
+    task_stats: TaskStats
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("id", "workspace_id", mode="before")
+    @classmethod
+    def convert_ids(cls, v):
+        if v and not cls._is_uuid(v):
+            return base64_to_uuid(v)
+        return v
+
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        return bool(uuid_pattern.match(value))
+
+    class Config:
+        populate_by_name = True
+
+    def __init__(self, **data):
+        if "_id" in data:
+            data["id"] = data.pop("_id")
+        if "workspaceId" in data:
+            data["workspace_id"] = data.pop("workspaceId")
+        if "ownerId" in data:
+            data["owner"] = data.pop("ownerId")
+        if "taskStats" in data:
+            data["task_stats"] = data.pop("taskStats")
+        if "createdAt" in data:
+            data["created_at"] = data.pop("createdAt")
+        if "updatedAt" in data:
+            data["updated_at"] = data.pop("updatedAt")
+        data.pop("__v", None)
+        super().__init__(**data)
+
+
+class ProjectGetResponse(BaseModel):
+    success: bool
+    count: int
+    data: list[ProjectGetData]
+
+
 class ProjectCreateRequest(BaseModel):
     name: str
     description: str
@@ -194,15 +280,33 @@ async def create_project(workspace_id: str, project_data: ProjectCreateRequest, 
 
 
 
-# class ProjectGetResponse(BaseModel):
-#     success: bool
-#     message: str
-#     data: ProjectData
-
-#     class Config:
-#         populate_by_name = True
-
-#     def __init__(self, **data):
-#         super().__init__(**data)
+class ProjectGetResponse(BaseModel):
+    success: bool
+    count: int
+    data: list[ProjectGetData]
 
 
+
+async def get_projects(workspace_id: str, token: str) -> ProjectGetResponse:
+    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/workspaces/{workspace_id}/projects"
+    headers = {
+        "accept": "*/*",
+        "Authorization": f"Bearer {token}",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                logger.info(f"Projects retrieved successfully from workspace {workspace_id}.")
+                return ProjectGetResponse.model_validate(data)
+            elif response.status == 401:
+                logger.error("Authentication failed while retrieving projects.")
+                raise AuthenticationError("Invalid or expired token.")
+            elif response.status == 404:
+                logger.error(f"Workspace {workspace_id} not found.")
+                raise NotFoundError(f"Workspace with ID {workspace_id} not found.")
+            else:
+                error_message = await response.text()
+                logger.error(f"Failed to retrieve projects: {error_message}")
+                raise InternalServerError(f"Retrieval failed with status {response.status}: {error_message}")
