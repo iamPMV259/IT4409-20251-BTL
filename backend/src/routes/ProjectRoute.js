@@ -1,3 +1,4 @@
+// src/routes/ProjectRoute.js
 const express = require('express');
 const router = express.Router();
 const GetController = require('../controller/GetController');
@@ -22,14 +23,14 @@ router.use(protect);
  *     description: Retrieve detailed information about a specific project
  *     tags: [Projects]
  *     security:
- *       - bearerAuth: []
+ *     - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: projectId
- *         required: true
- *         schema:
- *           type: string
- *         description: Project ID
+ *     - in: path
+ *       name: projectId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Project ID
  *     responses:
  *       200:
  *         description: Project details
@@ -48,14 +49,14 @@ router.get('/:projectId', GetController.getProjectDetail);
  *     description: Retrieve the Kanban board for a project with all columns and tasks
  *     tags: [Projects]
  *     security:
- *       - bearerAuth: []
+ *     - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: projectId
- *         required: true
- *         schema:
- *           type: string
- *         description: Project ID
+ *     - in: path
+ *       name: projectId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Project ID
  *     responses:
  *       200:
  *         description: Project board with columns and tasks
@@ -70,18 +71,18 @@ router.get('/:projectId/board', Module4Controller.getProjectBoard);
  * @swagger
  * /projects/{projectId}:
  *   patch:
- *     summary: Update project
- *     description: Update project information
+ *     summary: Update project details
+ *     description: Update project metadata. Only the project owner can perform this action.
  *     tags: [Projects]
  *     security:
- *       - bearerAuth: []
+ *     - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: projectId
- *         required: true
- *         schema:
- *           type: string
- *         description: Project ID
+ *     - in: path
+ *       name: projectId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Project ID
  *     requestBody:
  *       required: true
  *       content:
@@ -91,15 +92,33 @@ router.get('/:projectId/board', Module4Controller.getProjectBoard);
  *             properties:
  *               name:
  *                 type: string
+ *                 example: "New Project Name"
  *               description:
  *                 type: string
+ *                 example: "Updated description"
+ *               status:
+ *                 type: string
+ *                 enum: [active, on-hold, completed]
+ *                 example: "completed"
+ *               deadline:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-12-31T23:59:59.000Z"
+ *               ownerId:
+ *                 type: string
+ *                 description: "UUID of the new owner (Transfer ownership)"
+ *                 example: "58f026e6-e184-4cff-bcb4-3102e6599afa"
  *     responses:
  *       200:
  *         description: Project updated successfully
+ *       400:
+ *         description: Invalid input or status
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Forbidden (Not the owner)
  *       404:
- *         description: Project not found
+ *         description: Project or New Owner not found
  */
 router.patch('/:projectId', GetController.updateProject);
 
@@ -152,13 +171,14 @@ router.delete('/:projectId', GetController.deleteProject);
  *           schema:
  *             type: object
  *             required:
- *               - userIds
+ *               - newMemberEmails
  *             properties:
- *               userIds:
+ *               newMemberEmails:
  *                 type: array
  *                 items:
  *                   type: string
- *                 example: ["userId1", "userId2"]
+ *                   format: email
+ *                   example: ["user1@example.com", "user2@example.com"]
  *     responses:
  *       200:
  *         description: Members added successfully
@@ -192,14 +212,11 @@ router.post('/:projectId/members', GetController.addProjectMembers);
  *           schema:
  *             type: object
  *             required:
- *               - name
+ *               - title
  *             properties:
- *               name:
+ *               title:
  *                 type: string
  *                 example: To Do
- *               order:
- *                 type: number
- *                 example: 1
  *     responses:
  *       201:
  *         description: Column created successfully

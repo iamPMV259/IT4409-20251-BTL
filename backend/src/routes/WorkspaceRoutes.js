@@ -1,3 +1,4 @@
+// src/routes/WorkspaceRoutes.js
 const express = require('express');
 const router = express.Router();
 
@@ -22,14 +23,14 @@ router.use(protect);
  *     description: Retrieve all projects within a specific workspace
  *     tags: [Workspaces]
  *     security:
- *       - bearerAuth: []
+ *     - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: workspaceId
- *         required: true
- *         schema:
- *           type: string
- *         description: Workspace ID
+ *     - in: path
+ *       name: workspaceId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Workspace ID
  *     responses:
  *       200:
  *         description: List of projects
@@ -59,14 +60,14 @@ router.get('/:workspaceId/projects', GetController.getAllWorkspaces);
  *     description: Create a new project within a specific workspace
  *     tags: [Workspaces]
  *     security:
- *       - bearerAuth: []
+ *     - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: workspaceId
- *         required: true
- *         schema:
- *           type: string
- *         description: Workspace ID
+ *     - in: path
+ *       name: workspaceId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Workspace ID
  *     requestBody:
  *       required: true
  *       content:
@@ -74,7 +75,7 @@ router.get('/:workspaceId/projects', GetController.getAllWorkspaces);
  *           schema:
  *             type: object
  *             required:
- *               - name
+ *             - name
  *             properties:
  *               name:
  *                 type: string
@@ -82,6 +83,15 @@ router.get('/:workspaceId/projects', GetController.getAllWorkspaces);
  *               description:
  *                 type: string
  *                 example: Project description
+ *               deadline:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-12-31T23:59:59.000Z"
+ *               members:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *       description: Array of user IDs to invite
  *     responses:
  *       201:
  *         description: Project created successfully

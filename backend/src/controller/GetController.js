@@ -15,7 +15,7 @@ const areIdsEqual = (id1, id2) => {
     return id1.toString() === id2.toString();
 };
 
-const getAllWorkspaces = async (req, res) => { // Đã đổi tên hàm cho đúng ngữ nghĩa
+const getAllWorkspaces = async (req, res) => {
     try {
         const { workspaceId } = req.params;
         const userId = req.user._id;
@@ -27,7 +27,6 @@ const getAllWorkspaces = async (req, res) => { // Đã đổi tên hàm cho đú
         }
 
         // Check Membership
-        // Lưu ý: members là mảng object { userId, role }, ownerId là UUID
         const isMember = workspace.members.some(m => areIdsEqual(m.userId, userId));
         const isOwner = areIdsEqual(workspace.ownerId, userId);
 
@@ -57,7 +56,7 @@ const getAllWorkspaces = async (req, res) => { // Đã đổi tên hàm cho đú
 const createProject = async (req, res) => {
     try {
         const { workspaceId } = req.params;
-        const { name, description, members } = req.body;
+        const { name, description, members, deadline } = req.body;
         const userId = req.user._id;
         
         const workspace = await Workspace.findById(workspaceId);
@@ -88,7 +87,8 @@ const createProject = async (req, res) => {
             workspaceId,
             ownerId: userId,
             members: memberData,
-            taskStats: { open: 0, closed: 0 }
+            taskStats: { open: 0, closed: 0 },
+            deadline: deadline ? new Date(deadline) : undefined 
         });
         
         // 3. Initialize default columns
@@ -108,6 +108,7 @@ const createProject = async (req, res) => {
             createdColumns.push(column);
         }
         
+        // 4. Update Project with column order
         await Project.findByIdAndUpdate(projectId, {
             columnOrder: columnIds,
         }, { new: true });
@@ -132,7 +133,6 @@ const createProject = async (req, res) => {
     }
 };
 
-// --- HÀM BỊ LỖI CỦA BẠN ĐÃ ĐƯỢC SỬA TẠI ĐÂY ---
 const getProjectDetail = async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -146,15 +146,12 @@ const getProjectDetail = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Project not found' });
         }
 
-        // --- FIX LOGIC CHECK QUYỀN ---
-        // 1. Check Owner (ownerId đã populate nên nó là Object User, cần lấy ._id)
-        const ownerId = project.ownerId._id || project.ownerId; // Fallback an toàn
+        // Check Authorization
+        const ownerId = project.ownerId._id || project.ownerId;
         const isOwner = areIdsEqual(ownerId, userId);
 
-        // 2. Check Member
-        // Duyệt mảng members, kiểm tra m.userId (đã populate hoặc chưa)
         const isMember = project.members.some(m => {
-            const mId = m.userId._id || m.userId; // Nếu populate rồi thì lấy ._id, chưa thì lấy chính nó
+            const mId = m.userId._id || m.userId; 
             return areIdsEqual(mId, userId);
         });
         
@@ -176,7 +173,7 @@ const getProjectDetail = async (req, res) => {
 const updateProject = async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { name, description, status } = req.body;
+        const { name, description, status, deadline, ownerId } = req.body;
         const userId = req.user._id;
 
         const project = await Project.findById(projectId);
@@ -189,19 +186,37 @@ const updateProject = async (req, res) => {
         }
 
         const updateFields = {};
-        if (name) updateFields.name = name;
-        if (description) updateFields.description = description;
-        if (status) updateFields.status = status;
+        
+        if (name) updateFields.name = name.trim();
+        if (description !== undefined) updateFields.description = description; 
+        if (status) {
+            const validStatuses = ['active', 'on-hold', 'completed'];
+            if (!validStatuses.includes(status)) {
+                return res.status(400).json({ success: false, message: 'Invalid status' });
+            }
+            updateFields.status = status;
+        }
+        if (deadline) {
+            updateFields.deadline = new Date(deadline);
+        }
+        
+        if (ownerId && !areIdsEqual(ownerId, project.ownerId)) {
+            const newOwner = await User.findById(ownerId);
+            if (!newOwner) {
+                return res.status(404).json({ success: false, message: 'New owner user not found.' });
+            }
+            updateFields.ownerId = ownerId;
+        }
 
         if (Object.keys(updateFields).length === 0) {
-            return res.status(400).json({ success: false, message: 'No fields provided for update.' });
+            return res.status(400).json({ success: false, message: 'No valid fields provided for update.' });
         }
 
         const updatedProject = await Project.findByIdAndUpdate(
             projectId,
             { $set: updateFields },
             { new: true, runValidators: true }
-        );
+        ).populate({ path: 'ownerId', select: 'name email avatarUrl' });
 
         res.status(200).json({
             success: true,
@@ -273,7 +288,6 @@ const addProjectMembers = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Project not found.' });
         }
 
-        // Authorization check
         const isMember = project.members.some(m => areIdsEqual(m.userId, inviterId));
         const isOwner = areIdsEqual(project.ownerId, inviterId);
 
@@ -294,7 +308,6 @@ const addProjectMembers = async (req, res) => {
         const newMemberObjects = [];
         const addedUsersInfo = [];
 
-        // Lấy danh sách userId hiện tại (đổi hết sang String để so sánh)
         const currentMemberIds = project.members.map(m => m.userId.toString());
 
         usersToAdd.forEach(user => {

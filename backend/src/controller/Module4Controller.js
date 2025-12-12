@@ -6,7 +6,7 @@ const Column = require('../models/Columns');
 const Task = require('../models/Task');
 const Activity = require('../models/Activities');
 // Ensure Label model is registered (file is named `Lables.js` in this repo)
-const Label = require('../models/Lables');
+const Label = require('../models/Labels');
 
 // Helper function to create a UUID
 const generateUUID = () => new mongoose.Types.UUID();
