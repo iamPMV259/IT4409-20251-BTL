@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from './ui/dialog';
-import { Task } from './task-card';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Textarea } from './ui/textarea';
-import { Input } from './ui/input';
-import { Checkbox } from './ui/checkbox';
-import { Progress } from './ui/progress';
-import { Separator } from './ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+} from "./ui/dialog";
+import { Trash2 } from "lucide-react";
+// import { Task } from './task-card';
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { Progress } from "./ui/progress";
+import { Separator } from "./ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   AlignLeft,
   User,
@@ -26,19 +27,34 @@ import {
   X,
   Plus,
   Send,
-} from 'lucide-react';
-import { Calendar as CalendarComponent } from './ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from './ui/popover';
+} from "lucide-react";
+import { taskApi, Task } from "../lib/api"; // Import api
+import { toast } from "sonner";
+import { Calendar as CalendarComponent } from "./ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+
+// Giả lập danh sách thành viên dự án (Thực tế nên fetch từ API getProjectDetail)
+const MOCK_PROJECT_MEMBERS = [
+  { id: "123e4567-e89b-12d3-a456-426614174000", name: "John Doe", avatar: "" },
+  { id: "user-2", name: "Jane Smith", avatar: "" },
+];
+
+// Giả lập danh sách Label có sẵn
+const MOCK_LABELS = [
+  {
+    id: "123e4567-e89b-12d3-a456-426614174001",
+    name: "Design",
+    color: "bg-purple-500",
+  },
+  { id: "label-2", name: "Development", color: "bg-blue-500" },
+];
 
 interface CardDetailModalProps {
   task: Task | null;
   isOpen: boolean;
   onClose: () => void;
   onUpdate: (task: Task) => void;
+  onDelete?: (taskId: string, columnId: string) => void; // Prop mới
 }
 
 export function CardDetailModal({
@@ -46,59 +62,122 @@ export function CardDetailModal({
   isOpen,
   onClose,
   onUpdate,
+  onDelete,
 }: CardDetailModalProps) {
   const [editedTask, setEditedTask] = useState<Task | null>(task);
-  const [newComment, setNewComment] = useState('');
-  const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [newComment, setNewComment] = useState("");
+  const [newChecklistItem, setNewChecklistItem] = useState("");
   const [checklistItems, setChecklistItems] = useState([
-    { id: '1', text: 'Research competitors', completed: true },
-    { id: '2', text: 'Create wireframes', completed: true },
-    { id: '3', text: 'Design mockups', completed: false },
-    { id: '4', text: 'Get stakeholder approval', completed: false },
-    { id: '5', text: 'Hand off to development', completed: false },
+    { id: "1", text: "Research competitors", completed: true },
+    { id: "2", text: "Create wireframes", completed: true },
+    { id: "3", text: "Design mockups", completed: false },
+    { id: "4", text: "Get stakeholder approval", completed: false },
+    { id: "5", text: "Hand off to development", completed: false },
   ]);
 
   const [comments] = useState([
     {
-      id: '1',
-      author: 'Jane Smith',
-      avatar: '',
-      text: 'I have completed the initial research. The main competitors are using similar layouts.',
-      timestamp: '2 hours ago',
+      id: "1",
+      author: "Jane Smith",
+      avatar: "",
+      text: "I have completed the initial research. The main competitors are using similar layouts.",
+      timestamp: "2 hours ago",
     },
     {
-      id: '2',
-      author: 'John Doe',
-      avatar: '',
-      text: 'Great work! Let us schedule a review meeting for Friday.',
-      timestamp: '1 hour ago',
+      id: "2",
+      author: "John Doe",
+      avatar: "",
+      text: "Great work! Let us schedule a review meeting for Friday.",
+      timestamp: "1 hour ago",
     },
   ]);
 
   const [activities] = useState([
     {
-      id: '1',
-      user: 'John Doe',
+      id: "1",
+      user: "John Doe",
       action: 'moved this card from "To Do" to "In Progress"',
-      timestamp: '3 hours ago',
+      timestamp: "3 hours ago",
     },
     {
-      id: '2',
-      user: 'Jane Smith',
-      action: 'added a checklist',
-      timestamp: '4 hours ago',
+      id: "2",
+      user: "Jane Smith",
+      action: "added a checklist",
+      timestamp: "4 hours ago",
     },
     {
-      id: '3',
-      user: 'John Doe',
-      action: 'created this card',
-      timestamp: '1 day ago',
+      id: "3",
+      user: "John Doe",
+      action: "created this card",
+      timestamp: "1 day ago",
     },
   ]);
 
   React.useEffect(() => {
     setEditedTask(task);
   }, [task]);
+
+  // --- LOGIC ASSIGNEES ---
+  // Helper: Lấy thông tin user từ ID
+  const getMemberInfo = (userId: string) =>
+    MOCK_PROJECT_MEMBERS.find((m) => m.id === userId) || {
+      name: "Unknown",
+      avatar: "",
+    };
+
+  const handleToggleAssignee = async (userId: string) => {
+    const isAssigned = editedTask.assignees.includes(userId);
+
+    try {
+      let updatedTaskData;
+      if (isAssigned) {
+        // Gọi API Xóa
+        const { data } = await taskApi.removeAssignee(editedTask.id, userId);
+        updatedTaskData = data;
+        toast.success("Đã xóa thành viên");
+      } else {
+        // Gọi API Thêm
+        const { data } = await taskApi.addAssignee(editedTask.id, userId);
+        updatedTaskData = data;
+        toast.success("Đã thêm thành viên");
+      }
+
+      // Cập nhật state local & parent
+      setEditedTask(updatedTaskData);
+      onUpdate(updatedTaskData);
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi cập nhật thành viên");
+    }
+  };
+
+  // --- LOGIC LABELS ---
+  // Helper: Lấy thông tin label từ ID
+  const getLabelInfo = (labelId: string) =>
+    MOCK_LABELS.find((l) => l.id === labelId) || {
+      name: "Unknown",
+      color: "bg-gray-500",
+    };
+
+  const handleAddLabel = async (labelId: string) => {
+    if (editedTask.labels.includes(labelId)) return; // Đã có label này
+
+    try {
+      const { data } = await taskApi.addLabel(editedTask.id, labelId);
+      setEditedTask(data);
+      onUpdate(data);
+      toast.success("Đã thêm nhãn");
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi thêm nhãn");
+    }
+  };
+
+  const handleSave = () => {
+    if (!editedTask) return;
+    onUpdate(editedTask); // Gọi hàm update ở BoardView
+    onClose();
+  };
 
   if (!editedTask) return null;
 
@@ -107,18 +186,18 @@ export function CardDetailModal({
   const progress = (completedItems / totalItems) * 100;
 
   const availableLabels = [
-    { name: 'Design', color: 'bg-purple-500' },
-    { name: 'Development', color: 'bg-blue-500' },
-    { name: 'Bug', color: 'bg-red-500' },
-    { name: 'Feature', color: 'bg-green-500' },
-    { name: 'Urgent', color: 'bg-orange-500' },
+    { name: "Design", color: "bg-purple-500" },
+    { name: "Development", color: "bg-blue-500" },
+    { name: "Bug", color: "bg-red-500" },
+    { name: "Feature", color: "bg-green-500" },
+    { name: "Urgent", color: "bg-orange-500" },
   ];
 
   const teamMembers = [
-    { name: 'John Doe', avatar: '' },
-    { name: 'Jane Smith', avatar: '' },
-    { name: 'Bob Wilson', avatar: '' },
-    { name: 'Alice Johnson', avatar: '' },
+    { name: "John Doe", avatar: "" },
+    { name: "Jane Smith", avatar: "" },
+    { name: "Bob Wilson", avatar: "" },
+    { name: "Alice Johnson", avatar: "" },
   ];
 
   const toggleChecklistItem = (itemId: string) => {
@@ -139,7 +218,7 @@ export function CardDetailModal({
           completed: false,
         },
       ]);
-      setNewChecklistItem('');
+      setNewChecklistItem("");
     }
   };
 
@@ -179,57 +258,44 @@ export function CardDetailModal({
                     <Tag className="w-5 h-5 text-slate-600" />
                     <h3 className="text-slate-900">Labels</h3>
                   </div>
+                  {/* Labels Section */}
                   <div className="flex flex-wrap gap-2">
-                    {editedTask.labels.map((label, index) => (
-                      <Badge
-                        key={index}
-                        className={`${label.color} text-white border-0`}
-                      >
-                        {label.name}
-                        <button
-                          className="ml-2 hover:bg-white/20 rounded"
-                          onClick={() => {
-                            setEditedTask({
-                              ...editedTask,
-                              labels: editedTask.labels.filter(
-                                (_, i) => i !== index
-                              ),
-                            });
-                          }}
+                    {editedTask.labels.map((labelId, index) => {
+                      // Sửa label -> labelId
+                      const labelInfo = getLabelInfo(labelId); // Lấy thông tin từ ID
+                      return (
+                        <Badge
+                          key={index}
+                          className={`${labelInfo.color} text-white border-0`}
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
+                          {labelInfo.name}
+                          {/* Tạm thời bỏ nút xóa label ở đây vì chưa có API xóa label cụ thể trong context này */}
+                        </Badge>
+                      );
+                    })}
+                    {/* Nút Add Label (+ Popover) */}
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" size="sm">
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add label
+                          <Plus className="w-4 h-4 mr-1" /> Add label
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-64">
                         <div className="space-y-2">
-                          {availableLabels.map((label, index) => (
-                            <button
-                              key={index}
-                              onClick={() => {
-                                if (
-                                  !editedTask.labels.find(
-                                    (l) => l.name === label.name
-                                  )
-                                ) {
-                                  setEditedTask({
-                                    ...editedTask,
-                                    labels: [...editedTask.labels, label],
-                                  });
-                                }
-                              }}
-                              className={`w-full px-3 py-2 rounded text-white ${label.color} hover:opacity-90 text-left`}
-                            >
-                              {label.name}
-                            </button>
-                          ))}
+                          {MOCK_LABELS.map(
+                            (
+                              label,
+                              index // Dùng MOCK_LABELS thay vì availableLabels cũ
+                            ) => (
+                              <button
+                                key={index}
+                                onClick={() => handleAddLabel(label.id)} // <--- GỌI HÀM API MỚI
+                                className={`w-full px-3 py-2 rounded text-white ${label.color} hover:opacity-90 text-left`}
+                              >
+                                {label.name}
+                              </button>
+                            )
+                          )}
                         </div>
                       </PopoverContent>
                     </Popover>
@@ -244,7 +310,7 @@ export function CardDetailModal({
                   </div>
                   <Textarea
                     placeholder="Add a more detailed description..."
-                    value={editedTask.description || ''}
+                    value={editedTask.description || ""}
                     onChange={(e) =>
                       setEditedTask({
                         ...editedTask,
@@ -278,8 +344,8 @@ export function CardDetailModal({
                         <span
                           className={`flex-1 ${
                             item.completed
-                              ? 'line-through text-slate-500'
-                              : 'text-slate-700'
+                              ? "line-through text-slate-500"
+                              : "text-slate-700"
                           }`}
                         >
                           {item.text}
@@ -293,7 +359,7 @@ export function CardDetailModal({
                       value={newChecklistItem}
                       onChange={(e) => setNewChecklistItem(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           addChecklistItem();
                         }
                       }}
@@ -333,9 +399,9 @@ export function CardDetailModal({
                             <AvatarImage src={comment.avatar} />
                             <AvatarFallback className="bg-blue-600 text-white">
                               {comment.author
-                                .split(' ')
+                                .split(" ")
                                 .map((n) => n[0])
-                                .join('')}
+                                .join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
@@ -379,18 +445,20 @@ export function CardDetailModal({
                         <div key={activity.id} className="flex gap-3">
                           <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
                             {activity.user
-                              .split(' ')
+                              .split(" ")
                               .map((n) => n[0])
-                              .join('')}
+                              .join("")}
                           </div>
                           <div className="flex-1">
                             <p className="text-slate-700">
                               <span className="text-slate-900">
                                 {activity.user}
-                              </span>{' '}
+                              </span>{" "}
                               {activity.action}
                             </p>
-                            <p className="text-slate-500">{activity.timestamp}</p>
+                            <p className="text-slate-500">
+                              {activity.timestamp}
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -406,7 +474,10 @@ export function CardDetailModal({
                   <div className="space-y-2">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start">
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                        >
                           <User className="w-4 h-4 mr-2" />
                           Members
                         </Button>
@@ -437,9 +508,9 @@ export function CardDetailModal({
                                 <AvatarImage src={member.avatar} />
                                 <AvatarFallback className="bg-slate-200 text-slate-700">
                                   {member.name
-                                    .split(' ')
+                                    .split(" ")
                                     .map((n) => n[0])
-                                    .join('')}
+                                    .join("")}
                                 </AvatarFallback>
                               </Avatar>
                               <span className="text-slate-900">
@@ -453,7 +524,10 @@ export function CardDetailModal({
 
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start">
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                        >
                           <Calendar className="w-4 h-4 mr-2" />
                           Due date
                         </Button>
@@ -500,12 +574,14 @@ export function CardDetailModal({
                             <AvatarImage src={assignee.avatar} />
                             <AvatarFallback className="bg-slate-200 text-slate-700">
                               {assignee.name
-                                .split(' ')
+                                .split(" ")
                                 .map((n) => n[0])
-                                .join('')}
+                                .join("")}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-slate-900">{assignee.name}</span>
+                          <span className="text-slate-900">
+                            {assignee.name}
+                          </span>
                         </div>
                         <button
                           onClick={() => {
@@ -528,20 +604,31 @@ export function CardDetailModal({
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="p-6 pt-4 border-t border-slate-200 flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
-            <Button
-              onClick={() => {
-                onUpdate(editedTask);
-                onClose();
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Save changes
-            </Button>
+          {/* Thêm nút Delete vào Footer hoặc góc Header */}
+          <div className="p-6 pt-4 border-t border-slate-200 flex justify-between gap-2">
+            {/* Nút Xóa (Mới) */}
+            {onDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => onDelete(editedTask.id, editedTask.columnId)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Xóa thẻ
+              </Button>
+            )}
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose}>
+                Đóng
+              </Button>
+              <Button
+                onClick={handleSave}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Lưu thay đổi
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -4,11 +4,13 @@ import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { BoardColumn } from './board-column';
 import { CardDetailModal } from './card-detail-modal';
-import { Task } from './task-card';
+// import { Task } from './task-card';
 import { Input } from './ui/input';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
+import { taskApi, Task, CreateTaskPayload } from '../lib/api'; // Import api mới
+import { toast } from 'sonner';
 
 interface Column {
   id: string;
@@ -140,44 +142,79 @@ export function BoardView({ projectId, projectTitle, onBack }: BoardViewProps) {
     setIsModalOpen(true);
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    setColumns(
-      columns.map((column) => ({
-        ...column,
-        tasks: column.tasks.map((task) =>
-          task.id === updatedTask.id ? updatedTask : task
-        ),
-      }))
-    );
-  };
-
-  const handleAddTask = (columnId: string, title: string) => {
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title,
+  // --- HÀM TẠO TASK MỚI ---
+  const handleAddTask = async (columnId: string, title: string) => {
+    // 1. Tạo payload cơ bản
+    const payload: CreateTaskPayload = {
+      title: title,
+      description: "", 
       assignees: [],
-      labels: [],
-      comments: 0,
-      attachments: 0,
+      labels: []
     };
 
-    setColumns(
-      columns.map((column) =>
-        column.id === columnId
-          ? { ...column, tasks: [...column.tasks, newTask] }
-          : column
-      )
-    );
+    try {
+      // 2. Gọi API
+      const { data: newTask } = await taskApi.create(columnId, payload);
+
+      // 3. Cập nhật State Local (Thêm task vào cột tương ứng)
+      setColumns(prevColumns => 
+        prevColumns.map(col => {
+          if (col.id === columnId) {
+            return { ...col, tasks: [...col.tasks, newTask] }; // newTask từ backend đã có đầy đủ ID
+          }
+          return col;
+        })
+      );
+      toast.success("Thêm thẻ thành công");
+    } catch (error) {
+      console.error(error);
+      toast.error("Không thể tạo thẻ mới");
+    }
   };
 
-  const handleMoveTask = (taskId: string, targetColumnId: string) => {
-    let movedTask: Task | null = null;
+  // --- HÀM CẬP NHẬT TASK (Sửa tên, mô tả, dueDate...) ---
+  const handleUpdateTask = async (updatedTask: Task) => {
+    try {
+      // 1. Gọi API Update
+      // Lọc ra các field cần thiết để gửi lên server (tránh gửi cả object thừa)
+      const { data: serverTask } = await taskApi.update(updatedTask.id, {
+        title: updatedTask.title,
+        description: updatedTask.description,
+        dueDate: updatedTask.dueDate,
+        // Cần xử lý logic assignees/labels nếu UI đã hỗ trợ chọn
+      });
 
-    // Remove task from current column
+      // 2. Cập nhật State Local
+      setColumns(prevColumns => 
+        prevColumns.map(col => ({
+          ...col,
+          tasks: col.tasks.map(t => 
+            t.id === updatedTask.id ? { ...t, ...serverTask } : t
+          )
+        }))
+      );
+      toast.success("Cập nhật thành công");
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi khi cập nhật thẻ");
+    }
+  };
+
+  const handleMoveTask = async (taskId: string, targetColumnId: string) => {
+    // 1. Tìm task cần di chuyển
+    let movedTask: Task | null = null;
+    let sourceColumnId = "";
+
+    // Copy state cũ để revert nếu lỗi (Optimistic Update)
+    const originalColumns = [...columns];
+
+    // Cập nhật state UI trước cho mượt
     const newColumns = columns.map((column) => {
-      const task = column.tasks.find((t) => t.id === taskId);
-      if (task) {
-        movedTask = task;
+      // Tìm và xóa task khỏi cột cũ
+      const taskIndex = column.tasks.findIndex((t) => t.id === taskId);
+      if (taskIndex !== -1) {
+        movedTask = column.tasks[taskIndex];
+        sourceColumnId = column.id;
         return {
           ...column,
           tasks: column.tasks.filter((t) => t.id !== taskId),
@@ -186,15 +223,33 @@ export function BoardView({ projectId, projectTitle, onBack }: BoardViewProps) {
       return column;
     });
 
-    // Add task to target column
-    if (movedTask) {
+    if (movedTask && sourceColumnId) {
+      // Thêm task vào cột mới (Tạm thời push vào cuối danh sách)
+      // Nếu thư viện DnD trả về index thả, hãy dùng index đó. 
+      // Ở đây ví dụ thêm vào cuối:
+      const targetColumn = newColumns.find(c => c.id === targetColumnId);
+      const newPosition = targetColumn ? targetColumn.tasks.length : 0; // Index bắt đầu từ 0
+
       setColumns(
         newColumns.map((column) =>
           column.id === targetColumnId
-            ? { ...column, tasks: [...column.tasks, movedTask!] }
+            ? { ...column, tasks: [...column.tasks, { ...movedTask!, columnId: targetColumnId }] }
             : column
         )
       );
+
+      // 2. Gọi API Move
+      try {
+        await taskApi.move(taskId, {
+          targetColumnId: targetColumnId,
+          position: newPosition 
+        });
+        // Không cần toast success khi kéo thả để tránh spam
+      } catch (error) {
+        console.error("Move task failed:", error);
+        toast.error("Di chuyển thất bại");
+        setColumns(originalColumns); // Revert UI
+      }
     }
   };
 
@@ -210,6 +265,28 @@ export function BoardView({ projectId, projectTitle, onBack }: BoardViewProps) {
       ]);
       setNewColumnTitle('');
       setIsAddingColumn(false);
+    }
+  };
+
+  // --- HÀM XÓA TASK (Cần truyền xuống CardDetailModal hoặc Menu context) ---
+  const handleDeleteTask = async (taskId: string, columnId: string) => {
+    if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
+
+    try {
+      await taskApi.delete(taskId);
+      
+      setColumns(prevColumns => 
+        prevColumns.map(col => {
+          if (col.id === columnId) {
+            return { ...col, tasks: col.tasks.filter(t => t.id !== taskId) };
+          }
+          return col;
+        })
+      );
+      toast.success("Đã xóa thẻ");
+      setIsModalOpen(false); // Đóng modal nếu đang mở
+    } catch (error) {
+      toast.error("Không thể xóa thẻ");
     }
   };
 
@@ -404,6 +481,7 @@ export function BoardView({ projectId, projectTitle, onBack }: BoardViewProps) {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onUpdate={handleUpdateTask}
+          onDelete={handleDeleteTask}
         />
       </div>
     </DndProvider>
