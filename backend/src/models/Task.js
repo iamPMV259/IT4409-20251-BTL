@@ -14,6 +14,9 @@ const ChecklistItemSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+}, {
+    _id: false, // _id của subdoc đôi khi gây rối, nhưng nếu cần quản lý item thì để true.
+    // Nếu để _id thì cần toJSON ở đây nữa, nhưng đơn giản hóa thì ta xử lý ở parent
 });
 
 const TaskSchema = new mongoose.Schema({
@@ -46,7 +49,6 @@ const TaskSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
-    // Mảng các ID người dùng được giao việc
     assignees: [{
         type: mongoose.Schema.Types.UUID,
         ref: 'User',
@@ -55,7 +57,6 @@ const TaskSchema = new mongoose.Schema({
         type: Date,
         index: true,
     },
-    // Mảng các ID nhãn
     labels: [{
         type: mongoose.Schema.Types.UUID,
         ref: 'Label',
@@ -63,7 +64,41 @@ const TaskSchema = new mongoose.Schema({
     checklists: [ChecklistItemSchema],
 }, {
     timestamps: true,
-    collection: 'tasks' // Explicitly set collection name to match MongoDB
+    collection: 'tasks',
+    // --- THÊM PHẦN NÀY ---
+    toJSON: {
+        getters: true,
+        virtuals: true,
+        transform: (doc, ret) => {
+            delete ret.__v;
+            delete ret.id;
+
+            // Convert các trường đơn lẻ
+            const uuidFields = ['_id', 'projectId', 'columnId', 'creatorId'];
+            uuidFields.forEach(field => {
+                if (ret[field] && typeof ret[field] === 'object' && ret[field].toString) {
+                    ret[field] = ret[field].toString();
+                }
+            });
+
+            // Convert các trường mảng (Assignees, Labels)
+            const arrayUUIDFields = ['assignees', 'labels'];
+            arrayUUIDFields.forEach(field => {
+                if (ret[field] && Array.isArray(ret[field])) {
+                    ret[field] = ret[field].map(item => {
+                        // Nếu là object đã populate (User/Label object) thì giữ nguyên hoặc xử lý riêng
+                        // Nếu là Buffer/UUID raw thì convert
+                        if (item && typeof item === 'object' && item.constructor.name === 'Binary') {
+                            return item.toString();
+                        }
+                        return item;
+                    });
+                }
+            });
+
+            return ret;
+        }
+    }
 });
 
 module.exports = mongoose.model('Task', TaskSchema);

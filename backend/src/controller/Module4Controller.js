@@ -1,69 +1,94 @@
+// src/controller/Module4Controller.js
 const mongoose = require('mongoose');
 
-// Import Models (use actual filenames in project)
+// Import Models
 const Project = require('../models/Projects');
 const Column = require('../models/Columns');
 const Task = require('../models/Task');
 const Activity = require('../models/Activities');
-// Ensure Label model is registered (file is named `Lables.js` in this repo)
-const Label = require('../models/Labels');
+// Lưu ý: Đảm bảo tên file model Label đúng với file thực tế (Labels.js hoặc Lables.js)
+const Label = require('../models/Labels'); 
 
-// Helper function to create a UUID
 const generateUUID = () => new mongoose.Types.UUID();
 
-// ----------------------------------------------------
-// 1. GET /api/v1/projects/:projectId/board
-// Endpoint chính cho Board View
-// ----------------------------------------------------
+// --- HELPER: SO SÁNH ID AN TOÀN ---
+const areIdsEqual = (id1, id2) => {
+    if (!id1 || !id2) return false;
+    return id1.toString() === id2.toString();
+};
 
-/**
- * @desc Get the entire board structure (columns and nested tasks)
- * @route GET /api/v1/projects/:projectId/board
- * @access Private
- */
+// Helper Authorization Check
+const checkProjectAccess = (project, userId) => {
+    if (!project) return false;
+    
+    // 1. Check Owner
+    // ownerId có thể là Object User (nếu populate) hoặc UUID/String
+    const ownerId = project.ownerId._id || project.ownerId;
+    if (areIdsEqual(ownerId, userId)) return true;
+
+    // 2. Check Member
+    // members là mảng object [{ userId: ..., role: ... }]
+    if (project.members && Array.isArray(project.members)) {
+        return project.members.some(m => {
+             const mId = m.userId._id || m.userId;
+             return areIdsEqual(mId, userId);
+        });
+    }
+    
+    return false;
+};
+
+// 1. GET Project Board
 exports.getProjectBoard = async (req, res) => {
     try {
         const { projectId } = req.params;
         const userId = req.user._id;
 
-        // 1. Authorization Check (Simple check, assumes project exists)
-        const project = await Project.findById(projectId).select('members ownerId columnOrder');
-        if (!project || (!project.members.includes(userId) && !project.ownerId.equals(userId))) {
+        // Fetch project info
+        const project = await Project.findById(projectId)
+            .select('members ownerId columnOrder name')
+            .lean(); // Dùng lean() để lấy plain object, xử lý nhanh hơn
+
+        if (!project) {
+            return res.status(404).json({ success: false, message: 'Project not found' });
+        }
+        
+        // Authorization Check
+        if (!checkProjectAccess(project, userId)) {
             return res.status(403).json({ success: false, message: 'Access denied to this board.' });
         }
 
-        // 2. Fetch all columns for the project
-        const columns = await Column.find({ projectId }).sort({ createdAt: 1 }).lean(); // Use .lean() for faster, plain JavaScript objects
+        // Fetch Columns
+        const columns = await Column.find({ projectId }).sort({ createdAt: 1 }).lean();
 
-        // 3. Fetch all tasks for the project in one query
+        // Fetch Tasks
         const tasks = await Task.find({ projectId })
             .populate({ path: 'assignees', select: 'name avatarUrl' })
             .populate({ path: 'labels', select: 'text color' })
-            .select('-description -checklists') // Exclude heavy fields for board view
+            .select('-description -checklists')
             .lean();
 
-        // 4. Organize tasks into a Map for fast lookup (Task ID -> Task Object)
+        // Map Tasks by ID for O(1) access
         const taskIdMap = tasks.reduce((acc, task) => {
             acc[task._id.toString()] = task;
             return acc;
         }, {});
 
-        // 5. Organize columns with their tasks according to taskOrder
+        // Organize Columns with Tasks
         const boardColumns = columns.map(column => {
-            column.tasks = column.taskOrder
+            // Map taskOrder IDs to actual Task Objects
+            column.tasks = (column.taskOrder || [])
                 .map(taskId => taskIdMap[taskId.toString()])
-                .filter(task => task); // Filter out tasks that might be missing (deleted)
+                .filter(task => task); // Remove nulls (deleted tasks)
 
-            // Clean up the taskOrder array which is now redundant in the response
             delete column.taskOrder; 
             return column;
         });
         
-        // 6. Send the structured response
         res.status(200).json({
             success: true,
             data: {
-                project: project, // project info (including columnOrder if needed)
+                project: project,
                 columns: boardColumns,
             },
         });
@@ -73,109 +98,80 @@ exports.getProjectBoard = async (req, res) => {
     }
 };
 
-// ----------------------------------------------------
-// 2. POST /api/v1/projects/:projectId/columns
-// Tạo một cột (list) mới trong board.
-// ----------------------------------------------------
-
-/**
- * @desc Create a new column in the project board
- * @route POST /api/v1/projects/:projectId/columns
- * @access Private
- */
+// 2. POST Create Column
 exports.createColumn = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+    // ⚠️ Đã bỏ Transaction (Session) để chạy trên Standalone Mongo
     try {
         const { projectId } = req.params;
         const { title } = req.body;
         const userId = req.user._id;
         
         if (!title) {
-            await session.abortTransaction();
             return res.status(400).json({ success: false, message: 'Column title is required.' });
         }
 
-        // 1. Authorization Check (Must be a member)
-        const project = await Project.findById(projectId).session(session);
-        if (!project || (!project.members.includes(userId) && !project.ownerId.equals(userId))) {
-            await session.abortTransaction();
-            return res.status(403).json({ success: false, message: 'Access denied. Must be a project member.' });
+        const project = await Project.findById(projectId);
+        
+        if (!checkProjectAccess(project, userId)) {
+            return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
-        // 2. Create the new Column
         const newColumnId = generateUUID();
-        const newColumn = await Column.create([{
+        
+        // 1. Create Column
+        const newColumn = await Column.create({
             _id: newColumnId,
             title,
             projectId,
             taskOrder: [],
-        }], { session });
+        });
 
-        // 3. Update Project's columnOrder (add the new column ID to the end)
+        // 2. Update Project columnOrder
         await Project.findByIdAndUpdate(projectId, {
             $push: { columnOrder: newColumnId }
-        }, { new: false, session });
+        });
 
-        // 4. Log Activity
-        await Activity.create([{
+        // 3. Log Activity
+        await Activity.create({
             _id: generateUUID(),
             projectId: projectId,
             userId: userId,
             action: 'CREATED_COLUMN',
             details: { columnTitle: title },
-        }], { session });
+        });
 
-        await session.commitTransaction();
-        session.endSession();
-
-        // 5. Send the created column
         res.status(201).json({
             success: true,
             message: 'Column created successfully.',
-            data: newColumn[0],
+            data: newColumn,
         });
 
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         console.error('Error creating column:', error);
-        res.status(500).json({ success: false, message: 'Server Error during column creation.' });
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message });
     }
 };
 
-// ----------------------------------------------------
-// 3. PATCH /api/v1/columns/:columnId
-// Cập nhật một cột (ví dụ: đổi tên).
-// ----------------------------------------------------
-
-/**
- * @desc Update a column's details (e.g., title)
- * @route PATCH /api/v1/columns/:columnId
- * @access Private
- */
+// 3. PATCH Update Column
 exports.updateColumn = async (req, res) => {
     try {
         const { columnId } = req.params;
         const { title } = req.body;
         const userId = req.user._id;
 
-        // 1. Find Column and Project ID
         const column = await Column.findById(columnId);
         if (!column) {
             return res.status(404).json({ success: false, message: 'Column not found.' });
         }
         
-        // 2. Authorization Check (Ensure user is member of the associated project)
         const project = await Project.findById(column.projectId);
-        if (!project || (!project.members.includes(userId) && !project.ownerId.equals(userId))) {
-            return res.status(403).json({ success: false, message: 'Access denied. Must be a project member.' });
+        
+        if (!checkProjectAccess(project, userId)) {
+            return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
-        // 3. Update the Column
         if (!title) {
-             return res.status(400).json({ success: false, message: 'No fields provided for update.' });
+             return res.status(400).json({ success: false, message: 'No fields provided.' });
         }
         
         const updatedColumn = await Column.findByIdAndUpdate(
@@ -184,7 +180,6 @@ exports.updateColumn = async (req, res) => {
             { new: true, runValidators: true }
         );
 
-        // 4. Log Activity
         await Activity.create({
             _id: generateUUID(),
             projectId: column.projectId,
@@ -205,93 +200,81 @@ exports.updateColumn = async (req, res) => {
     }
 };
 
-// ----------------------------------------------------
-// 4. DELETE /api/v1/columns/:columnId
-// Xóa một cột.
-// ----------------------------------------------------
-
-/**
- * @desc Delete a column and move its tasks to the next column
- * @route DELETE /api/v1/columns/:columnId
- * @access Private
- */
+// 4. DELETE Column
 exports.deleteColumn = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+    // ⚠️ Đã bỏ Transaction (Session)
     try {
         const { columnId } = req.params;
         const userId = req.user._id;
 
-        // 1. Fetch Column and Project
-        const columnToDelete = await Column.findById(columnId).session(session);
+        const columnToDelete = await Column.findById(columnId);
         if (!columnToDelete) {
-            await session.abortTransaction();
             return res.status(404).json({ success: false, message: 'Column not found.' });
         }
-        const projectId = columnToDelete.projectId;
         
-        const project = await Project.findById(projectId).session(session);
-        if (!project || (!project.members.includes(userId) && !project.ownerId.equals(userId))) {
-            await session.abortTransaction();
-            return res.status(403).json({ success: false, message: 'Access denied. Must be a project member.' });
+        const projectId = columnToDelete.projectId;
+        const project = await Project.findById(projectId);
+        
+        if (!checkProjectAccess(project, userId)) {
+            return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
-        // 2. Identify the target column for tasks
-        const columnIndex = project.columnOrder.findIndex(id => id.equals(columnId));
-        const targetColumnId = project.columnOrder[columnIndex + 1] || project.columnOrder[columnIndex - 1]; 
+        // Logic: Chuyển task sang cột bên cạnh
+        // columnOrder là mảng UUID, cần convert sang String để tìm index
+        const columnOrderStr = project.columnOrder.map(id => id.toString());
+        const columnIndex = columnOrderStr.indexOf(columnId.toString());
+        
+        // Tìm cột đích (trước hoặc sau cột hiện tại)
+        let targetColumnId = null;
+        if (columnIndex > 0) {
+            targetColumnId = project.columnOrder[columnIndex - 1];
+        } else if (columnIndex < project.columnOrder.length - 1) {
+            targetColumnId = project.columnOrder[columnIndex + 1];
+        }
 
-        // 3. Move/Delete tasks
         if (targetColumnId) {
-            // Move tasks to the next/previous column
+            // Move tasks
             await Task.updateMany(
                 { columnId: columnId },
-                { $set: { columnId: targetColumnId } },
-                { session }
+                { $set: { columnId: targetColumnId } }
             );
 
-            // Add moved tasks to the beginning of the target column's taskOrder
-            const tasksToMove = columnToDelete.taskOrder;
+            // Cập nhật taskOrder của cột đích (đưa task mới lên đầu)
+            const tasksToMove = columnToDelete.taskOrder || [];
             if (tasksToMove.length > 0) {
                  await Column.findByIdAndUpdate(targetColumnId, {
                     $push: { taskOrder: { $each: tasksToMove, $position: 0 } }
-                }, { session });
+                });
             }
-
         } else {
-            // No other columns exist, delete all tasks in this column directly
-            await Task.deleteMany({ columnId: columnId }, { session });
+            // Không còn cột nào khác -> Xóa hết task
+            await Task.deleteMany({ columnId: columnId });
         }
 
-        // 4. Remove column ID from Project's columnOrder
+        // Xóa cột khỏi Project
         await Project.findByIdAndUpdate(projectId, {
             $pull: { columnOrder: columnId }
-        }, { new: false, session });
+        });
 
-        // 5. Delete the Column itself
-        await Column.deleteOne({ _id: columnId }, { session });
+        // Xóa cột
+        await Column.deleteOne({ _id: columnId });
 
-        // 6. Log Activity
-        await Activity.create([{
+        // Log Activity
+        await Activity.create({
             _id: generateUUID(),
             projectId: projectId,
             userId: userId,
             action: 'DELETED_COLUMN',
             details: { columnTitle: columnToDelete.title, tasksRelocated: !!targetColumnId },
-        }], { session });
-
-        await session.commitTransaction();
-        session.endSession();
+        });
 
         res.status(200).json({
             success: true,
-            message: `Column '${columnToDelete.title}' deleted and its tasks were handled successfully.`,
+            message: `Column deleted.`,
         });
 
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         console.error('Error deleting column:', error);
-        res.status(500).json({ success: false, message: 'Transaction failed during column deletion.' });
+        res.status(500).json({ success: false, message: 'Delete failed.', error: error.message });
     }
 };

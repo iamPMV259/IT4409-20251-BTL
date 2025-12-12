@@ -15,6 +15,10 @@ const areIdsEqual = (id1, id2) => {
     return id1.toString() === id2.toString();
 };
 
+/**
+ * @desc Get all projects in a workspace
+ * @route GET /api/v1/workspaces/:workspaceId/projects
+ */
 const getAllWorkspaces = async (req, res) => {
     try {
         const { workspaceId } = req.params;
@@ -53,6 +57,10 @@ const getAllWorkspaces = async (req, res) => {
     }
 };
 
+/**
+ * @desc Create a new project
+ * @route POST /api/v1/workspaces/:workspaceId/projects
+ */
 const createProject = async (req, res) => {
     try {
         const { workspaceId } = req.params;
@@ -133,6 +141,10 @@ const createProject = async (req, res) => {
     }
 };
 
+/**
+ * @desc Get project details
+ * @route GET /api/v1/projects/:projectId
+ */
 const getProjectDetail = async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -170,6 +182,10 @@ const getProjectDetail = async (req, res) => {
     }
 }
 
+/**
+ * @desc Update project information
+ * @route PATCH /api/v1/projects/:projectId
+ */
 const updateProject = async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -234,33 +250,27 @@ const updateProject = async (req, res) => {
  * @route DELETE /api/v1/projects/:projectId
  */
 const deleteProject = async (req, res) => {
-    // ⚠️ Đã bỏ Transaction do MongoDB server không hỗ trợ Replica Set
+    // ⚠️ No Transaction (For Standalone Mongo)
     try {
         const { projectId } = req.params;
         const userId = req.user._id;
 
-        // 1. Tìm Project
         const project = await Project.findById(projectId);
 
         if (!project) {
             return res.status(404).json({ success: false, message: 'Project not found.' });
         }
 
-        // 2. Check quyền Owner
         if (!areIdsEqual(project.ownerId, userId)) {
             return res.status(403).json({ success: false, message: 'Only the project owner can delete the project.' });
         }
 
-        // 3. Xóa dữ liệu liên quan (Cascade Delete)
-        // Không dùng { session } nữa
         await Column.deleteMany({ projectId });
         await Task.deleteMany({ projectId });
         await Activity.deleteMany({ projectId });
         
-        // 4. Xóa Project
         await Project.deleteOne({ _id: projectId });
 
-        // 5. Trả về thành công
         res.status(200).json({
             success: true,
             message: 'Project and all related data deleted successfully.',
@@ -272,16 +282,29 @@ const deleteProject = async (req, res) => {
     }
 };
 
+/**
+ * @desc Add members to a project
+ * @route POST /api/v1/projects/:projectId/members
+ */
 const addProjectMembers = async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { newMemberEmails } = req.body;
+        let { newMemberEmails } = req.body; // Dùng let để có thể modify
         const inviterId = req.user._id;
 
-        if (!newMemberEmails || !Array.isArray(newMemberEmails) || newMemberEmails.length === 0) {
+        // 1. Validate Input cơ bản
+        if (!newMemberEmails || !Array.isArray(newMemberEmails)) {
             return res.status(400).json({ success: false, message: 'Must provide a list of new member emails.' });
         }
 
+        // --- FIX QUAN TRỌNG: Làm phẳng mảng để tránh lỗi nested array [["email"]] ---
+        newMemberEmails = newMemberEmails.flat();
+
+        if (newMemberEmails.length === 0) {
+            return res.status(400).json({ success: false, message: 'Email list cannot be empty.' });
+        }
+
+        // 2. Fetch Project & Check Auth
         const project = await Project.findById(projectId);
         if (!project) {
             return res.status(404).json({ success: false, message: 'Project not found.' });
@@ -294,22 +317,32 @@ const addProjectMembers = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Not authorized to add members.' });
         }
 
+        // 3. Tìm Users trong Database
         const usersToAdd = await User.find({ email: { $in: newMemberEmails } });
 
-        if (usersToAdd.length === 0) {
-            return res.status(400).json({ 
+        // 4. Kiểm tra xem có email nào không tồn tại không
+        const foundEmails = usersToAdd.map(u => u.email);
+        const notFoundEmails = newMemberEmails.filter(email => !foundEmails.includes(email));
+
+        if (notFoundEmails.length > 0) {
+            return res.status(404).json({ 
                 success: false, 
-                message: 'No users found with the provided emails.',
-                notFoundEmails: newMemberEmails
+                message: `The following users were not found: ${notFoundEmails.join(', ')}`,
+                notFoundEmails: notFoundEmails
             });
         }
 
+        // 5. Lọc ra những người chưa là thành viên
         const newMemberObjects = [];
         const addedUsersInfo = [];
 
+        // Lấy danh sách ID thành viên hiện tại (chuyển về String)
         const currentMemberIds = project.members.map(m => m.userId.toString());
+        // Thêm cả Owner vào danh sách check (đề phòng)
+        if (project.ownerId) currentMemberIds.push(project.ownerId.toString());
 
         usersToAdd.forEach(user => {
+            // Chỉ thêm nếu chưa tồn tại trong project
             if (!currentMemberIds.includes(user._id.toString())) {
                 newMemberObjects.push({ userId: user._id, role: 'member' });
                 addedUsersInfo.push({ id: user._id, name: user.name, email: user.email });
@@ -319,16 +352,17 @@ const addProjectMembers = async (req, res) => {
         if (newMemberObjects.length === 0) {
             return res.status(200).json({
                 success: true,
-                message: 'All provided users are already members.',
+                message: 'All provided users are already members of this project.',
                 data: project,
             });
         }
 
+        // 6. Cập nhật Project
         const updatedProject = await Project.findByIdAndUpdate(
             projectId,
             { $push: { members: { $each: newMemberObjects } } },
             { new: true, runValidators: true }
-        );
+        ).populate({ path: 'members.userId', select: 'name email avatarUrl' });
 
         res.status(200).json({
             success: true,
