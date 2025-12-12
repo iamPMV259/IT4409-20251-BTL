@@ -11,7 +11,7 @@ const Workspace = require('../models/Workspace');
 const Project = require('../models/Projects');
 const Column = require('../models/Columns');
 const Task = require('../models/Task');
-const Label = require('../models/Lables');
+const Label = require('../models/Labels');
 const Comment = require('../models/Comments');
 const Activity = require('../models/Activities');
 

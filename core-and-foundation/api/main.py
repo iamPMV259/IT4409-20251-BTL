@@ -3,10 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.router import authentication, workspaces, tasks
-from websocket.router import router as ws_router
+from api.router import authentication, columns, projects, tasks, workspaces
 from clients import Clients
 from configs import get_logger
+from websocket.router import router as ws_router
 from websockket import manager
 from websockket import router as websocket_router
 
@@ -44,6 +44,8 @@ app.include_router(authentication.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(columns.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
 app.include_router(ws_router)
 
 

@@ -5,10 +5,12 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
+
 #from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from pydantic import BaseModel
 
 from .mongo_config import MongoConfig
+from .nodejs_backend_config import NodeJSBackendConfig
 
 # HACK: This service needs to initialize the logging instrumentor before any logging is done.
 # Still not sure why this service has to do this.
@@ -44,6 +46,7 @@ def expand_env_vars(obj: Any) -> Any:
 
 class AppConfig(BaseModel):
     mongo: MongoConfig
+    nodejs_backend: NodeJSBackendConfig
 
 
 def load_config(config_path: str = "app-config.yaml") -> AppConfig:
@@ -99,3 +102,4 @@ except Exception as e:
     _config = None
 
 mongo_config = _config.mongo if _config else None
+nodejs_backend_config = _config.nodejs_backend if _config else None

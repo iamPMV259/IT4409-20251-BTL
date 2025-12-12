@@ -17,14 +17,39 @@ const ColumnSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
-    // Mảng các ID tham chiếu đến 'tasks', quyết định thứ tự các task
+    // Mảng các ID tham chiếu đến 'tasks'
     taskOrder: [{
         type: mongoose.Schema.Types.UUID,
         ref: 'Task',
     }],
 }, {
     timestamps: true,
-    collection: 'columns' // Explicitly set collection name to match MongoDB
+    collection: 'columns',
+    // --- THÊM PHẦN NÀY ĐỂ FIX LỖI BUFFER ---
+    toJSON: {
+        getters: true,
+        virtuals: true,
+        transform: (doc, ret) => {
+            delete ret.__v;
+            delete ret.id;
+
+            // Convert _id và projectId
+            if (ret._id && typeof ret._id === 'object' && ret._id.toString) {
+                ret._id = ret._id.toString();
+            }
+            if (ret.projectId && typeof ret.projectId === 'object' && ret.projectId.toString) {
+                ret.projectId = ret.projectId.toString();
+            }
+
+            // Convert mảng taskOrder (QUAN TRỌNG)
+            if (ret.taskOrder && Array.isArray(ret.taskOrder)) {
+                ret.taskOrder = ret.taskOrder.map(id => 
+                    (id && typeof id === 'object' && id.toString) ? id.toString() : id
+                );
+            }
+            return ret;
+        }
+    }
 });
 
 module.exports = mongoose.model('Column', ColumnSchema);

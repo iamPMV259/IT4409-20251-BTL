@@ -45,3 +45,18 @@ class ValidationError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=detail,
         )
+
+class BadRequestError(HTTPException):
+    """Raised when the request is malformed or invalid"""
+    def __init__(self, detail: str = "Bad request"):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail,
+        )
+class InternalServerError(HTTPException):
+    """Raised when an internal server error occurs"""
+    def __init__(self, detail: str = "Internal server error"):
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
