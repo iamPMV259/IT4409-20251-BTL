@@ -1,39 +1,40 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from uuid import UUID
-from websocket import ws_manager
 
 from fastapi import APIRouter, Depends, Query, status
 
 from api.dependencies import (
+    check_workspace_access,
     get_current_user,
     get_workspace_by_id,
-    check_workspace_access,
 )
 from hooks.http_errors import NotFoundError, PermissionDeniedError, ValidationError
 from mongo.schemas import (
-    Users,
-    Tasks,
-    Columns,
-    Projects,
-    Comments,
-    ChecklistItem,
     Activities,
+    ChecklistItem,
+    Columns,
+    Comments,
+    Projects,
+    Tasks,
+    Users,
 )
 from utils.task_models import (
-    TaskCreate,
-    TaskUpdate,
-    TaskMove,
-    TaskResponse,
     AssigneeAdd,
-    LabelAdd,
+    ChecklistItemCreate,
+    ChecklistItemResponse,
+    ChecklistItemUpdate,
     CommentCreate,
     CommentResponse,
-    ChecklistItemCreate,
-    ChecklistItemUpdate,
-    ChecklistItemResponse,
+    LabelAdd,
     MyTasksFilter,
+    TaskCreate,
+    TaskMove,
+    TaskResponse,
+    TaskUpdate,
 )
+from websocket import ws_manager
 
 router = APIRouter(tags=["Tasks"])
 
@@ -54,11 +55,6 @@ async def create_task(
 ):
     """
     Create a new task in a column
-    
-    - **column_id**: Target column ID
-    - **title**: Task title (required)
-    - **description**: Task description (optional)
-    - **dueDate**: Due date (optional)
     """
     # Verify column exists and user has access
     column = await Columns.get(column_id)
@@ -75,10 +71,6 @@ async def create_task(
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this workspace")
-    
-    # Get the last task position in this column
-    existing_tasks = await Tasks.find(Tasks.columnId == column_id).to_list()
-    max_position = max([task.taskOrder for task in column.taskOrder] if column.taskOrder else [0], default=0)
     
     # Create new task
     new_task = Tasks(
@@ -122,8 +114,8 @@ async def create_task(
         createdAt=new_task.createdAt,
         updatedAt=new_task.updatedAt
     )
- #Realtime broadcast: sever:task_created
- #broadcast realtime do not block API
+    
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -139,7 +131,7 @@ async def create_task(
     "/tasks/{task_id}",
     response_model=TaskResponse,
     summary="Get task details",
-    description="Get detailed information about a specific task (for modal display)"
+    description="Get detailed information about a specific task"
 )
 async def get_task(
     task_id: UUID,
@@ -147,8 +139,6 @@ async def get_task(
 ):
     """
     Get task details by ID
-    
-    Returns complete task information including assignees, labels, checklist, and comments
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -184,7 +174,7 @@ async def get_task(
     "/tasks/{task_id}",
     response_model=TaskResponse,
     summary="Update task",
-    description="Update basic task information (title, description, due date)"
+    description="Update basic task information"
 )
 async def update_task(
     task_id: UUID,
@@ -193,10 +183,6 @@ async def update_task(
 ):
     """
     Update task information
-    
-    - **title**: New task title (optional)
-    - **description**: New description (optional)
-    - **dueDate**: New due date (optional)
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -224,16 +210,17 @@ async def update_task(
     await task.save()
     
     # Log activity
+    # FIX: Dùng model_dump_json() để chuyển Dictionary thành String JSON
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
         userId=current_user.id,
         action="updated task",
-        details={"fields_updated": task_data.model_dump(exclude_unset=True)}
+        details={"fields_updated": task_data.model_dump_json(exclude_unset=True)}
     )
     await activity.insert()
     
-    task_response =  TaskResponse(
+    task_response = TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
@@ -248,7 +235,7 @@ async def update_task(
         updatedAt=task.updatedAt
     )
 
-    # REALTIME BROADCAST: server:task_updated
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -264,7 +251,7 @@ async def update_task(
     "/tasks/{task_id}/move",
     response_model=TaskResponse,
     summary="Move task (Drag & Drop)",
-    description="Handle drag-and-drop operations, update task position and column"
+    description="Handle drag-and-drop operations"
 )
 async def move_task(
     task_id: UUID,
@@ -272,10 +259,7 @@ async def move_task(
     current_user: Annotated[Users, Depends(get_current_user)]
 ):
     """
-    Move task to different column or position (Drag & Drop handler)
-    
-    - **targetColumnId**: Target column ID
-    - **position**: New position in the column (0-indexed)
+    Move task to different column or position
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -321,6 +305,7 @@ async def move_task(
     await task.save()
     
     # Log activity
+    # FIX: Ép kiểu position về string để đảm bảo đúng schema dict[str, str]
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -329,7 +314,7 @@ async def move_task(
         details={
             "from_column": str(old_column_id),
             "to_column": str(new_column_id),
-            "position": move_data.position
+            "position": str(move_data.position) if move_data.position is not None else "last"
         }
     )
     await activity.insert()
@@ -349,7 +334,7 @@ async def move_task(
         updatedAt=task.updatedAt
     )
 
-    # REALTIME BROADCAST: server:task_moved
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -378,8 +363,6 @@ async def delete_task(
 ):
     """
     Delete a task
-    
-    This will also remove the task from its column's task order
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -411,7 +394,7 @@ async def delete_task(
     )
     await activity.insert()
 
-    # REALTIME BROADCAST: server:task_deleted
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -429,7 +412,6 @@ async def delete_task(
     return None
 
 
-
 @router.post(
     "/tasks/{task_id}/assignees",
     response_model=TaskResponse,
@@ -443,8 +425,6 @@ async def add_assignee(
 ):
     """
     Assign a user to a task
-    
-    - **userId**: User ID to assign
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -502,7 +482,7 @@ async def add_assignee(
         updatedAt=task.updatedAt
     )
 
-    # OPTIONAL: broadcast task_updated because assignees changed
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -577,7 +557,7 @@ async def remove_assignee(
         updatedAt=task.updatedAt
     )
 
-    # OPTIONAL: broadcast task_updated because assignees changed
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -602,8 +582,6 @@ async def add_label(
 ):
     """
     Add a label to a task
-    
-    - **labelId**: Label ID to add
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -614,7 +592,7 @@ async def add_label(
     if not project:
         raise NotFoundError("Project not found")
     
-    from mongo.schemas import Workspaces, Labels
+    from mongo.schemas import Labels, Workspaces
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
@@ -661,7 +639,7 @@ async def add_label(
         updatedAt=task.updatedAt
     )
 
-    # OPTIONAL: broadcast task_updated because labels changed
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -687,8 +665,6 @@ async def add_comment(
 ):
     """
     Add a comment to a task
-    
-    - **content**: Comment content
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -731,7 +707,7 @@ async def add_comment(
         createdAt=new_comment.createdAt
     )
 
-    # REALTIME BROADCAST: server:comment_added
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -741,7 +717,6 @@ async def add_comment(
     )
 
     return comment_response
-
 
 
 @router.post(
@@ -758,9 +733,6 @@ async def add_checklist_item(
 ):
     """
     Add a checklist item to a task
-    
-    - **text**: Checklist item text
-    - **checked**: Initial checked state (default: false)
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -797,13 +769,13 @@ async def add_checklist_item(
     )
     await activity.insert()
     
-    # Return the newly created item (last item in the list)
+    # Return the newly created item
     item_response = ChecklistItemResponse(
         text=new_item.text,
         checked=new_item.checked
     )
 
-     # OPTIONAL: broadcast task_updated because checklist changed
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -828,12 +800,11 @@ async def add_checklist_item(
     return item_response
 
 
-
 @router.patch(
     "/tasks/{task_id}/checklist-items/{item_index}",
     response_model=ChecklistItemResponse,
     summary="Update checklist item",
-    description="Update a checklist item (text or checked status)"
+    description="Update a checklist item"
 )
 async def update_checklist_item(
     task_id: UUID,
@@ -843,10 +814,6 @@ async def update_checklist_item(
 ):
     """
     Update a checklist item
-    
-    - **item_index**: Index of the item in the checklist (0-based)
-    - **text**: New text (optional)
-    - **checked**: New checked status (optional)
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -876,24 +843,26 @@ async def update_checklist_item(
     await task.save()
     
     # Log activity
+    # FIX: Dùng model_dump_json() và ép kiểu index thành string
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
         userId=current_user.id,
         action="updated checklist item",
         details={
-            "item_index": item_index,
-            "changes": item_data.model_dump(exclude_unset=True)
+            "item_index": str(item_index),
+            "changes": item_data.model_dump_json(exclude_unset=True)
         }
     )
     await activity.insert()
-    #Build response
+    
+    # Build response
     item_response = ChecklistItemResponse(
         text=task.checklists[item_index].text,
         checked=task.checklists[item_index].checked
     )
 
-    # OPTIONAL: broadcast task_updated because checklist changed
+    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_workspace(
             str(workspace.id),
@@ -918,15 +887,13 @@ async def update_checklist_item(
     return item_response
 
 
-
-
 # ==================== MODULE 6: MY TASKS API ====================
 
 @router.get(
     "/me/tasks",
     response_model=List[TaskResponse],
     summary="Get my tasks",
-    description="Get all tasks assigned to current user with filtering options"
+    description="Get all tasks assigned to current user"
 )
 async def get_my_tasks(
     current_user: Annotated[Users, Depends(get_current_user)],
@@ -937,12 +904,6 @@ async def get_my_tasks(
 ):
     """
     Get all tasks assigned to the current user
-    
-    Supports filtering by:
-    - **project_id**: Show only tasks from a specific project
-    - **label_id**: Show only tasks with a specific label
-    - **overdue**: Show only overdue tasks
-    - **this_week**: Show only tasks due this week
     """
     # Base query: all tasks assigned to current user
     query_conditions = [Tasks.assignees == current_user.id]
