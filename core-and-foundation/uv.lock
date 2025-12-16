@@ -217,6 +217,7 @@ dependencies = [
     { name = "requests" },
     { name = "ujson" },
     { name = "uvicorn" },
+    { name = "websocat" },
 ]
 
 [package.metadata]
@@ -241,6 +242,7 @@ requires-dist = [
     { name = "requests", specifier = "==2.32.3" },
     { name = "ujson", specifier = ">=5.11.0" },
     { name = "uvicorn", specifier = ">=0.34.2" },
+    { name = "websocat", specifier = ">=1.13.0" },
 ]
 
 [[package]]
@@ -974,6 +976,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cb/ce/f06b84e2697fef4688ca63bdb2fdf113ca0a3be33f94488f2cadb690b0cf/uvicorn-0.38.0.tar.gz", hash = "sha256:fd97093bdd120a2609fc0d3afe931d4d4ad688b6e75f0f929fde1bc36fe0e91d", size = 80605, upload-time = "2025-10-18T13:46:44.63Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ee/d9/d88e73ca598f4f6ff671fb5fde8a32925c2e08a637303a1d12883c7305fa/uvicorn-0.38.0-py3-none-any.whl", hash = "sha256:48c0afd214ceb59340075b4a052ea1ee91c16fbc2a9b1469cca0e54566977b02", size = 68109, upload-time = "2025-10-18T13:46:42.958Z" },
+]
+
+[[package]]
+name = "websocat"
+version = "1.13.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/05/0d7cf0039b8fac733c1183f0cde00351605170823008e87a289cb2c0eef2/websocat-1.13.0-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:0e3d173a3c4e41a36dee8509686b1ed01628969f86f08f1fd4c8d2feb02704af", size = 930065, upload-time = "2024-04-16T23:17:34.417Z" },
+    { url = "https://files.pythonhosted.org/packages/65/d7/d727d5ee6bf617a0aab7a25e379efe95edde0b76246e7743c5c6ea5a1c5c/websocat-1.13.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:4a1fbdf0dc4ed0246440974d288aa117765cdca93d427a73bc28f343e12e7673", size = 881830, upload-time = "2024-04-16T23:17:28.666Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/da/7f9e1fa92e518e859200a37f0791259e80c98280657e26b9069f533b01f0/websocat-1.13.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:96392d52aa5c44088343d8157cf87b2d0680ef5e20cae0b99954de28462ed828", size = 2984709, upload-time = "2024-04-16T23:19:07.494Z" },
+    { url = "https://files.pythonhosted.org/packages/af/4d/2cf4b7021cdfbf43742de094e200750923a3f21c83f0d93ee31a8fd53cbb/websocat-1.13.0-py3-none-manylinux_2_31_x86_64.whl", hash = "sha256:6d3a949115a2efbda34b0dbdafa1598caa484b8fd6fe8d2d73296be2828a8736", size = 2827527, upload-time = "2024-04-16T23:18:09.854Z" },
+    { url = "https://files.pythonhosted.org/packages/09/30/765a95ef1b99341d7e2a4f1dbcffdfb73e7d746004a77ac0475b8d585e8f/websocat-1.13.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:83bcf971651fda3ebeb446ba21df09cd9c56eb531e6ad4466e410d699ae38b37", size = 2838418, upload-time = "2024-04-16T23:18:13.559Z" },
+    { url = "https://files.pythonhosted.org/packages/04/c7/4769c566fb736039c578af5cd669b673c260d871393c38b1100e40395281/websocat-1.13.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:b229cf92c11070fb6a5645987249f7443b802359e38918f97e4b150bd72e185d", size = 2883828, upload-time = "2024-04-16T23:18:18.651Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/cb/ce1a34abffe2c9779876bfd05cb58bf20f9ae8b9694400a0acc727fa6893/websocat-1.13.0-py3-none-win_amd64.whl", hash = "sha256:92a5a246b0f875f26c0365b8f0e5e051c870461e1674c9c4af60167fa40d6e76", size = 863280, upload-time = "2024-04-16T23:23:36.119Z" },
 ]
 
 [[package]]

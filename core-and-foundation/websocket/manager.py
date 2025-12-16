@@ -4,11 +4,12 @@ from typing import Dict, List
 
 from fastapi import WebSocket
 
+from configs import get_logger
+
+logger = get_logger("websocket-manager")
 
 class ConnectionManager:
     def __init__(self):
-        # Lưu trữ danh sách kết nối theo Project ID
-        # Cấu trúc: { "project_uuid": [WebSocket1, WebSocket2, ...] }
         self.active_connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, project_id: str):
@@ -21,7 +22,7 @@ class ConnectionManager:
             self.active_connections[project_id] = []
         
         self.active_connections[project_id].append(websocket)
-        print(f"🔌 Client connected to Project: {project_id}. Total: {len(self.active_connections[project_id])}")
+        logger.info(f"🔌 Client connected to Project: {project_id}. Total: {len(self.active_connections[project_id])}")
 
     def disconnect(self, websocket: WebSocket, project_id: str):
         """
@@ -30,7 +31,7 @@ class ConnectionManager:
         if project_id in self.active_connections:
             if websocket in self.active_connections[project_id]:
                 self.active_connections[project_id].remove(websocket)
-                print(f"❌ Client disconnected from Project: {project_id}")
+                logger.info(f"❌ Client disconnected from Project: {project_id}")
             
             # Dọn dẹp key nếu room trống để tiết kiệm RAM
             if not self.active_connections[project_id]:
@@ -58,7 +59,7 @@ class ConnectionManager:
             try:
                 await connection.send_text(message_json)
             except Exception as e:
-                print(f"⚠️ Error sending to client: {e}")
+                logger.warning(f"⚠️ Error sending to client: {e}")
                 to_remove.append(connection)
         
         # Cleanup các kết nối chết (nếu có)
