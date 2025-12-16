@@ -13,8 +13,7 @@ logger = get_logger("nodejs-backend-columns")
 
 
 class ColumnUpdateRequest(BaseModel):
-    name: str | None
-    order: int | None
+    title: str | None = None
 
 class ColumnResponse(BaseModel):
     success: bool

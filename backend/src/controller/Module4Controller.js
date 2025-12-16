@@ -145,7 +145,7 @@ exports.createColumn = async (req, res) => {
             SocketService.getIO().to(projectId).emit('server:column_created', {
                 event: 'server:column_created',
                 data: {
-                    _id: newColumn._id.toString(),
+                    columId: newColumn._id.toString(),
                     title: newColumn.title,
                     projectId: projectId,
                     taskOrder: []
@@ -207,8 +207,9 @@ exports.updateColumn = async (req, res) => {
             SocketService.getIO().to(column.projectId.toString()).emit('server:column_updated', {
                 event: 'server:column_updated',
                 data: {
-                    _id: columnId, // Đã là string từ params
-                    title: title
+                    columnId: columnId, // Đã là string từ params
+                    title: title,
+                    projectId: column.projectId.toString()
                 }
             });
         } catch (err) { console.error("Socket error", err.message); }

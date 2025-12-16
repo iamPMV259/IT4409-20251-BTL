@@ -240,11 +240,12 @@ const updateProject = async (req, res) => {
             SocketService.getIO().to(projectId).emit('server:project_updated', {
                 event: 'server:project_updated',
                 data: {
-                    _id: updatedProject._id.toString(),
+                    projectId: updatedProject._id.toString(),
                     name: updatedProject.name,
                     description: updatedProject.description,
                     status: updatedProject.status,
-                    updatedAt: updatedProject.updatedAt
+                    updatedAt: updatedProject.updatedAt,
+                    deadline: updatedProject.deadline
                 }
             });
         } catch (socketError) {

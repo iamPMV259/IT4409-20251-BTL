@@ -252,7 +252,7 @@ async def update_project(project_id: str, update_data: ProjectUpdateRequest, tok
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    payload = update_data.model_dump(exclude_unset=True)
+    payload = update_data.model_dump(exclude_unset=True, mode='json')
     async with aiohttp.ClientSession() as session:
         async with session.patch(url, json=payload, headers=headers) as response:
             if response.status == 200:

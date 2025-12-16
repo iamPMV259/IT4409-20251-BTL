@@ -22,6 +22,8 @@ sio = socketio.AsyncClient(logger=False, engineio_logger=False)
 async def forward_event_to_clients(event: str, data: dict):
     payload = data.get("data", {})
     # Cố gắng lấy projectId từ nhiều nguồn khác nhau trong data
+    # print(f"Received event {event} with data: {data}")
+    # print(f"Payload data: {payload}")
     project_id = payload.get("projectId") or payload.get("project_id") or payload.get("_id")
     
     if project_id:
