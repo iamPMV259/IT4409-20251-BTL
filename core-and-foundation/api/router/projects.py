@@ -13,10 +13,11 @@ from hooks.http_errors import (
 from migrate_nodejs_backend.projects import (
     ProjectAddMemberResponse,
     ProjectBoardResponse,
-    ProjectColumnsCreatedResponse,
+    ProjectColumnCreatedResponse,
     ProjectDeleteResponse,
-    ProjectGetResponse,
+    ProjectDetailResponse,
     ProjectUpdateRequest,
+    ProjectUpdateResponse,  # <--- MỚI THÊM
     add_project_member,
     create_project_columns,
     delete_project,
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 
 @router.get(
     path="/{project_id}",
-    response_model=ProjectGetResponse,
+    response_model=ProjectDetailResponse,
     status_code=status.HTTP_200_OK,
     summary="Get project details",
     description="Get details of a specific project by its ID"
@@ -43,20 +44,12 @@ async def api_get_project(
 ):
     r"""
     **Get project details by its ID**
-    
-    **Args:**
-        `project_id`: ID of the project to retrieve
-        (Requires authentication via Bearer token)
-    **Returns:**
-        `ProjectGetResponse` with project details
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to get the project details
     try:
         return await get_project(
             project_id=project_id,
@@ -74,9 +67,46 @@ async def api_get_project(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
+@router.get(
+    path="/{project_id}/board",
+    response_model=ProjectBoardResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get project board",
+    description="Get the Kanban board details including columns and tasks"
+)
+async def api_get_project_board(
+    project_id: str,
+    current_user: Annotated[Users, Depends(get_current_user)],
+    request: Request,
+):
+    r"""
+    **Get project board by its ID**
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
+    bearer_token = auth_header[len("Bearer "):]
+
+    try:
+        return await get_project_board(
+            project_id=project_id,
+            token=bearer_token
+        )
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except BadRequestError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except InternalServerError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
 @router.patch(
     path="/{project_id}",
-    response_model=ProjectGetResponse,
+    response_model=ProjectUpdateResponse,  # <--- ĐÃ SỬA: Dùng model update riêng
     status_code=status.HTTP_200_OK,
     summary="Update project details",
     description="Update the details of a specific project by its ID"
@@ -89,25 +119,10 @@ async def api_update_project(
 ):
     r"""
     **Update project details by its ID**
-    
-    **Args:**
-    - **project_id**: ID of the project to update
-    - **update_data**: Data to update the project
-        `name`: New name of the project (optional)
-        `description`: New description of the project (optional)
-        `status`: New status of the project (optional)
-        `deadline`: New deadline of the project (optional, ISO 8601 format)
-    
-        (Requires authentication via Bearer token)
-    **Returns:**
-        `ProjectGetResponse` with updated project details
-
     """
-
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
     bearer_token = auth_header[len("Bearer "):]
 
     try:
@@ -142,20 +157,12 @@ async def api_delete_project(
 ):
     r"""
     **Delete a project by its ID**
-    
-    **Args:**
-        `project_id`: ID of the project to delete
-        (Requires authentication via Bearer token)
-    **Returns:**
-        `ProjectDeleteResponse` indicating success or failure
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to delete the project
     try:
         return await delete_project(
             project_id=project_id,
@@ -173,7 +180,6 @@ async def api_delete_project(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-
 @router.post(
     path="/{project_id}/members",
     response_model=ProjectAddMemberResponse,
@@ -189,22 +195,12 @@ async def api_add_project_member(
 ):
     r"""
     **Add a member to a project by its ID**
-    
-    **Args:**
-    - **project_id**: ID of the project to add the member to
-    - **member_email**: Email of the member to add to the project
-    
-        (Requires authentication via Bearer token)
-    **Returns:**
-        `ProjectAddMemberResponse` indicating success or failure
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to add the project member
     try:
         return await add_project_member(
             project_id=project_id,
@@ -223,10 +219,9 @@ async def api_add_project_member(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-
 @router.post(
     path="/{project_id}/columns",
-    response_model=ProjectColumnsCreatedResponse,
+    response_model=ProjectColumnCreatedResponse,
     status_code=status.HTTP_200_OK,
     summary="Create default columns for project",
     description="Create default columns (To Do, In Progress, Done) for a specific project by its ID"
@@ -239,18 +234,10 @@ async def api_create_project_columns(
 ):
     r"""
     **Create default columns for a project by its ID**
-    
-    **Args:**
-        `project_id`: ID of the project to create default columns for
-        `column_title`: Title of the column to create
-        (Requires authentication via Bearer token)
-    **Returns:**
-        `ProjectColumnsCreatedResponse` indicating success or failure
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
     bearer_token = auth_header[len("Bearer "):]
 
     try:
