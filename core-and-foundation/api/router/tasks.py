@@ -10,6 +10,7 @@ from api.dependencies import (
     get_current_user,
     get_workspace_by_id,
 )
+from api.websocket import ws_manager
 from hooks.http_errors import NotFoundError, PermissionDeniedError, ValidationError
 from mongo.schemas import (
     Activities,
@@ -34,7 +35,6 @@ from utils.task_models import (
     TaskResponse,
     TaskUpdate,
 )
-from websocket import ws_manager
 
 router = APIRouter(tags=["Tasks"])
 
@@ -117,8 +117,8 @@ async def create_task(
     
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_created",
             task_response.model_dump()
         )
@@ -237,8 +237,8 @@ async def update_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -336,12 +336,13 @@ async def move_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_moved",
             {
                 "taskId": str(task.id),
                 "sourceColumnId": str(old_column_id),
+                "sourcePosition": old_column.taskOrder.index(task.id) if old_column and task.id in old_column.taskOrder else -1,
                 "destColumnId": str(new_column_id),
                 "newPosition": move_data.position
             }
@@ -396,8 +397,8 @@ async def delete_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_deleted",
             {
                 "taskId": str(task.id),
@@ -484,8 +485,8 @@ async def add_assignee(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -559,8 +560,8 @@ async def remove_assignee(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -641,8 +642,8 @@ async def add_label(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -709,8 +710,8 @@ async def add_comment(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:comment_added",
             comment_response.model_dump()
         )
@@ -777,8 +778,8 @@ async def add_checklist_item(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             TaskResponse(
                 id=task.id,
@@ -864,8 +865,8 @@ async def update_checklist_item(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             TaskResponse(
                 id=task.id,

@@ -4,11 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.router import authentication, columns, projects, tasks, workspaces
+from api.websocket import (
+    count_active_connections,
+    count_total_rooms,
+    count_total_users,
+    start_socketio_client,
+    stop_socketio_client,
+)
+from api.websocket import router as ws_router
 from clients import Clients
 from configs import get_logger
-from websocket.router import router as ws_router
-from websockket import manager
-from websockket import router as websocket_router
 
 mongo_clients = Clients().get_mongo_client()
 logger = get_logger("api-main")
@@ -42,7 +47,6 @@ app.add_middleware(
 
 app.include_router(authentication.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
-app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(columns.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
@@ -74,9 +78,9 @@ async def health():
         "api": "running",
         "database": "connected",
         "websocket": {
-            "active_connections": manager.get_connection_count(),
-            "total_users": len(manager.user_connections),
-            "total_rooms": len(manager.project_rooms)
+            "active_connections": await count_active_connections(),
+            "total_users": await count_total_users(),
+            "total_rooms": await count_total_rooms()
         }
     }
 

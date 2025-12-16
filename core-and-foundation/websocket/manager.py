@@ -1,54 +1,69 @@
+import asyncio
+import json
+from typing import Dict, List
 
-
-from typing import Dict, List, Any
 from fastapi import WebSocket
 
 
-class WebSocketManager:
-    """
-    A simple manager to track clients in workspaces
-    and broadcast events to them.
-    """
-
+class ConnectionManager:
     def __init__(self):
-        # workspaceId -> list of WebSocket connections
+        # Lưu trữ danh sách kết nối theo Project ID
+        # Cấu trúc: { "project_uuid": [WebSocket1, WebSocket2, ...] }
         self.active_connections: Dict[str, List[WebSocket]] = {}
 
-    async def connect(self, workspace_id: str, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, project_id: str):
+        """
+        Chấp nhận kết nối và đưa Client vào Room (Project) tương ứng.
+        """
         await websocket.accept()
-        if workspace_id not in self.active_connections:
-            self.active_connections[workspace_id] = []
-        self.active_connections[workspace_id].append(websocket)
+        
+        if project_id not in self.active_connections:
+            self.active_connections[project_id] = []
+        
+        self.active_connections[project_id].append(websocket)
+        print(f"🔌 Client connected to Project: {project_id}. Total: {len(self.active_connections[project_id])}")
 
-    def disconnect(self, workspace_id: str, websocket: WebSocket):
-        if workspace_id in self.active_connections:
-            if websocket in self.active_connections[workspace_id]:
-                self.active_connections[workspace_id].remove(websocket)
-
-    async def broadcast_to_workspace(self, workspace_id: str, event_name: str, data: Any):
+    def disconnect(self, websocket: WebSocket, project_id: str):
         """
-        Send message to all clients connected to the workspace.
+        Xóa kết nối khi Client rời đi hoặc mất mạng.
         """
-        if workspace_id not in self.active_connections:
-            return
+        if project_id in self.active_connections:
+            if websocket in self.active_connections[project_id]:
+                self.active_connections[project_id].remove(websocket)
+                print(f"❌ Client disconnected from Project: {project_id}")
+            
+            # Dọn dẹp key nếu room trống để tiết kiệm RAM
+            if not self.active_connections[project_id]:
+                del self.active_connections[project_id]
 
-        message = {
-            "event": event_name,
+    async def broadcast_to_project(self, project_id: str, event_type: str, data: dict):
+        """
+        Hàm quan trọng nhất: Gửi data cho TẤT CẢ client đang xem Project đó.
+        Dùng hàm này để gọi từ các API khác (Create Column, Move Task, etc.)
+        """
+        if project_id not in self.active_connections:
+            return # Không có ai đang xem project này thì không cần gửi
+
+        payload = {
+            "event": event_type,
             "data": data
         }
+        
+        # Chuyển payload thành JSON string
+        message_json = json.dumps(payload, default=str) # default=str để xử lý UUID/Datetime
 
-        dead_connections = []
-
-        for ws in self.active_connections[workspace_id]:
+        # Gửi bất đồng bộ cho tất cả user trong room
+        to_remove = []
+        for connection in self.active_connections[project_id]:
             try:
-                await ws.send_json(message)
-            except Exception:
-                dead_connections.append(ws)
+                await connection.send_text(message_json)
+            except Exception as e:
+                print(f"⚠️ Error sending to client: {e}")
+                to_remove.append(connection)
+        
+        # Cleanup các kết nối chết (nếu có)
+        for dead_conn in to_remove:
+            self.disconnect(dead_conn, project_id)
 
-        # Remove dead connections
-        for ws in dead_connections:
-            self.disconnect(workspace_id, ws)
-
-
-#  instance dùng để import trong API
-ws_manager = WebSocketManager()
+# Tạo một instance global để dùng chung cho cả App
+ws_manager = ConnectionManager()

@@ -32,6 +32,7 @@ dependencies = [
   "python-jose>=3.5.0",
   "passlib>=1.7.4",
   "ujson>=5.11.0",
+  "python-socketio[client]>=5.15.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -8,6 +8,7 @@ const Task = require('../models/Task');
 const Activity = require('../models/Activities');
 // Lưu ý: Đảm bảo tên file model Label đúng với file thực tế (Labels.js hoặc Lables.js)
 const Label = require('../models/Labels'); 
+const SocketService = require('../services/SocketService');
 
 const generateUUID = () => new mongoose.Types.UUID();
 
@@ -100,7 +101,6 @@ exports.getProjectBoard = async (req, res) => {
 
 // 2. POST Create Column
 exports.createColumn = async (req, res) => {
-    // ⚠️ Đã bỏ Transaction (Session) để chạy trên Standalone Mongo
     try {
         const { projectId } = req.params;
         const { title } = req.body;
@@ -139,6 +139,20 @@ exports.createColumn = async (req, res) => {
             action: 'CREATED_COLUMN',
             details: { columnTitle: title },
         });
+
+        // --- SOCKET EVENT: server:column_created ---
+        try {
+            SocketService.getIO().to(projectId).emit('server:column_created', {
+                event: 'server:column_created',
+                data: {
+                    _id: newColumn._id.toString(),
+                    title: newColumn.title,
+                    projectId: projectId,
+                    taskOrder: []
+                }
+            });
+        } catch (err) { console.error("Socket error", err.message); }
+        // -------------------------------------------
 
         res.status(201).json({
             success: true,
@@ -188,6 +202,18 @@ exports.updateColumn = async (req, res) => {
             details: { oldTitle: column.title, newTitle: title },
         });
 
+        // --- SOCKET EVENT: server:column_updated ---
+        try {
+            SocketService.getIO().to(column.projectId.toString()).emit('server:column_updated', {
+                event: 'server:column_updated',
+                data: {
+                    _id: columnId, // Đã là string từ params
+                    title: title
+                }
+            });
+        } catch (err) { console.error("Socket error", err.message); }
+        // -------------------------------------------
+
         res.status(200).json({
             success: true,
             message: 'Column updated successfully.',
@@ -202,7 +228,6 @@ exports.updateColumn = async (req, res) => {
 
 // 4. DELETE Column
 exports.deleteColumn = async (req, res) => {
-    // ⚠️ Đã bỏ Transaction (Session)
     try {
         const { columnId } = req.params;
         const userId = req.user._id;
@@ -219,12 +244,9 @@ exports.deleteColumn = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
-        // Logic: Chuyển task sang cột bên cạnh
-        // columnOrder là mảng UUID, cần convert sang String để tìm index
         const columnOrderStr = project.columnOrder.map(id => id.toString());
         const columnIndex = columnOrderStr.indexOf(columnId.toString());
         
-        // Tìm cột đích (trước hoặc sau cột hiện tại)
         let targetColumnId = null;
         if (columnIndex > 0) {
             targetColumnId = project.columnOrder[columnIndex - 1];
@@ -233,13 +255,11 @@ exports.deleteColumn = async (req, res) => {
         }
 
         if (targetColumnId) {
-            // Move tasks
             await Task.updateMany(
                 { columnId: columnId },
                 { $set: { columnId: targetColumnId } }
             );
 
-            // Cập nhật taskOrder của cột đích (đưa task mới lên đầu)
             const tasksToMove = columnToDelete.taskOrder || [];
             if (tasksToMove.length > 0) {
                  await Column.findByIdAndUpdate(targetColumnId, {
@@ -247,19 +267,15 @@ exports.deleteColumn = async (req, res) => {
                 });
             }
         } else {
-            // Không còn cột nào khác -> Xóa hết task
             await Task.deleteMany({ columnId: columnId });
         }
 
-        // Xóa cột khỏi Project
         await Project.findByIdAndUpdate(projectId, {
             $pull: { columnOrder: columnId }
         });
 
-        // Xóa cột
         await Column.deleteOne({ _id: columnId });
 
-        // Log Activity
         await Activity.create({
             _id: generateUUID(),
             projectId: projectId,
@@ -267,6 +283,18 @@ exports.deleteColumn = async (req, res) => {
             action: 'DELETED_COLUMN',
             details: { columnTitle: columnToDelete.title, tasksRelocated: !!targetColumnId },
         });
+
+        // --- SOCKET EVENT: server:column_deleted ---
+        try {
+            SocketService.getIO().to(projectId.toString()).emit('server:column_deleted', {
+                event: 'server:column_deleted',
+                data: {
+                    columnId: columnId, // Đã là string từ params
+                    projectId: projectId.toString()
+                }
+            });
+        } catch (err) { console.error("Socket error", err.message); }
+        // -------------------------------------------
 
         res.status(200).json({
             success: true,
