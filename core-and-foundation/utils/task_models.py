@@ -138,14 +138,15 @@ class LabelCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "text": "High Priority"
+                "text": "High Priority",
+                "color": "#FF5733"
             }
         }
 
 class LabelResponse(BaseModel):
     """Schema for label response"""
-    id: UUID = Field(..., description="Label unique identifier")
-    projectId: UUID = Field(..., description="Project ID")
+    id: str = Field(..., description="Label unique identifier")
+    projectId: str = Field(..., description="Project ID")
     text: str = Field(..., description="Label text")
     color: str | None = Field(..., description="Label color (hex code)")
     
