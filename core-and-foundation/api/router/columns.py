@@ -13,12 +13,15 @@ from hooks.http_errors import (
     PermissionDeniedError,
 )
 from migrate_nodejs_backend.columns import (
+    ColumnGetResponse,
     ColumnResponse,
     ColumnUpdateRequest,
+    TaskAssigneees,
+    TaskColumn,
     delete_column,
     update_column,
 )
-from mongo.schemas import Users
+from mongo.schemas import Columns, Labels, Tasks, Users
 
 logger = get_logger("columns")
 
@@ -113,3 +116,69 @@ async def api_delete_column(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except InternalServerError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(path="/{column_id}", 
+    response_model=ColumnGetResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get a column",
+    description="Retrieve a specific column by its ID"
+)
+async def api_get_column(
+    column_id: str,
+    current_user: Annotated[Users, Depends(get_current_user)],
+):
+    r"""
+    **Get a column by its ID**
+    
+    **Args:**
+        `column_id`: ID of the column to retrieve
+        (Requires authentication via Bearer token)
+    """
+
+    column = await Columns.get(column_id)
+    if not column:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Column not found")
+
+    task_orders = []
+    
+
+    for task_id in column.taskOrder:
+        task = await Tasks.get(task_id)
+        if not task:
+            continue
+        assignees_info = []
+        for assignee_id in task.assignees:
+            assignee = await Users.get(assignee_id)
+            if not assignee:
+                continue
+            assignees_info.append(TaskAssigneees(
+                userId=str(assignee.id),
+                name=assignee.name
+            ))
+        labels_info = []
+        for label_id in task.labels:
+            label = await Labels.get(label_id)
+            if not label:
+                continue
+            labels_info.append(label.name)
+        task_column = TaskColumn(
+            taskId=str(task.id),
+            title=task.title,
+            description=task.description,
+            assignees=assignees_info,
+            dueDate=task.dueDate,
+            labels=labels_info,
+        )
+        task_orders.append(task_column)
+
+    response = ColumnGetResponse(
+        columnId=str(column.id),
+        projectId=str(column.projectId),
+        taskOrders=task_orders
+    )
+
+    return response
+    
+
+        

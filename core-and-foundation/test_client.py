@@ -4,7 +4,7 @@ import json
 import socketio
 
 # Cấu hình
-SERVER_URL = 'http://localhost:8346'
+SERVER_URL = 'http://131.153.239.187:8346'
 PROJECT_ID = "e6c36618-2e67-4429-9ade-1c3879f0f42d"
 
 # Khởi tạo Async Client

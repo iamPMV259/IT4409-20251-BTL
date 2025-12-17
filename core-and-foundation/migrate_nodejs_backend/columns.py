@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import aiohttp
 from pydantic import BaseModel
 
@@ -14,6 +16,26 @@ logger = get_logger("nodejs-backend-columns")
 
 class ColumnUpdateRequest(BaseModel):
     title: str | None = None
+
+class TaskAssigneees(BaseModel):
+    userId: str
+    name: str
+
+class TaskColumn(BaseModel):
+    taskId: str
+    title: str
+    description: str | None = None
+    assignees: list[TaskAssigneees] | None = []
+    dueDate: datetime | None = None
+    labels: list[str] | None = []
+    checklists: list[str] | None = []
+
+
+class ColumnGetResponse(BaseModel):
+    columnId: str
+    projectId: str
+    taskOrders: list[TaskColumn]
+
 
 class ColumnResponse(BaseModel):
     success: bool
