@@ -258,8 +258,14 @@ async def move_task(
     move_data: TaskMove,
     current_user: Annotated[Users, Depends(get_current_user)]
 ):
-    """
-    Move task to different column or position
+    r"""
+    **Move task to different column or position**
+    **Args:**
+    - **task_id**: ID of the task to move
+    - **targetColumnId**: ID of the target column
+    - **position**: (Optional) New position in the target column (0-indexed). If not provided, appends to the end.
+
+
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -284,17 +290,24 @@ async def move_task(
     
     if not new_column:
         raise NotFoundError(f"Target column with ID {new_column_id} not found")
+
+    source_position = None
     
     # Remove from old column's task order
     if old_column and task_id in old_column.taskOrder:
+        source_position = old_column.taskOrder.index(task_id)
         old_column.taskOrder.remove(task_id)
         await old_column.save()
+
+    new_position = move_data.position
     
     # Add to new column's task order at specified position
     if move_data.position is not None:
         position = min(move_data.position, len(new_column.taskOrder))
+        new_position = position
         new_column.taskOrder.insert(position, task_id)
     else:
+        new_position = len(new_column.taskOrder)
         new_column.taskOrder.append(task_id)
     
     await new_column.save()
@@ -342,9 +355,9 @@ async def move_task(
             {
                 "taskId": str(task.id),
                 "sourceColumnId": str(old_column_id),
-                "sourcePosition": old_column.taskOrder.index(task.id) if old_column and task.id in old_column.taskOrder else -1,
+                "sourcePosition": source_position,
                 "destColumnId": str(new_column_id),
-                "newPosition": move_data.position
+                "newPosition": new_position
             }
         )
     )
@@ -450,8 +463,9 @@ async def add_assignee(
     if not assignee:
         raise NotFoundError("User not found")
     
-    if not check_workspace_access(assignee, workspace):
-        raise ValidationError("User doesn't have access to this workspace")
+    project_members = [member.userId for member in project.members]
+    if assignee_data.userId not in project_members:
+        raise ValidationError("User doesn't have access to this project")
     
     # Add assignee
     task.assignees.append(assignee_data.userId)

@@ -132,6 +132,123 @@ async def create_workspace(
         updatedAt=new_workspace.updatedAt
     )
 
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class MemberAddedData(BaseModel):
+    userId: str
+    role: Literal["owner", "admin", "member"] = "member"
+
+@router.post(
+    path="/{workspace_id}/members",
+    response_model=WorkspaceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Add member to workspace",
+    description="Add a new member to the workspace")
+async def add_workspace_member(
+    workspace_id: str,
+    listed_member: list[MemberAddedData],
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    r"""
+    **Add a new member to the workspace**
+    **Args:**
+    - **workspace_id**: ID of the workspace to add member to
+    - **listed_member**: List of members to add with the following fields:
+        - **userId**: ID of the user to add as member
+        - **role**: Role of the new member ('owner', 'admin', 'member'). Default is 'member'.
+    """
+
+    # Find the workspace
+    workspace = await Workspaces.get(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    # Check if current user is owner or admin
+    if not any(member.userId == current_user.id and member.role in ["owner", "admin"] for member in workspace.members):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owners or admins can add members")
+
+    # Add new members
+    for member_data in listed_member:
+        if any(member.userId == member_data.userId for member in workspace.members):
+            continue  # Skip if user is already a member
+        new_member = WorkspaceMember(
+            userId=member_data.userId,
+            role=member_data.role
+        )
+        workspace.members.append(new_member)
+    await workspace.save()
+
+    return WorkspaceResponse(
+        id=workspace.id,
+        name=workspace.name,
+        ownerId=workspace.ownerId,
+        members=[
+            WorkspaceMemberResponse(
+                userId=member.userId,
+                role=member.role
+            )
+            for member in workspace.members
+        ],
+        createdAt=workspace.createdAt,
+        updatedAt=workspace.updatedAt
+    )
+
+
+@router.patch(
+    path="/{workspace_id}",
+    response_model=WorkspaceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update workspace",
+    description="Update workspace details")
+async def update_workspace(
+    workspace_id: str,
+    workspace_data: WorkspaceCreate,
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    Update workspace details
+    
+    - **workspace_id**: ID of the workspace to update
+    - **name**: New workspace name
+    
+    Only the owner can update the workspace
+    
+    Requires authentication via Bearer token
+    """
+    # Find the workspace
+    workspace = await Workspaces.get(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    
+    # Check if current user is owner
+    if workspace.ownerId != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner can update the workspace")
+    
+    # Update workspace details
+    workspace.name = workspace_data.name
+    workspace.updatedAt = datetime.now(timezone.utc)
+    
+    # Save changes
+    await workspace.save()
+    
+    return WorkspaceResponse(
+        id=workspace.id,
+        name=workspace.name,
+        ownerId=workspace.ownerId,
+        members=[
+            WorkspaceMemberResponse(
+                userId=member.userId,
+                role=member.role
+            )
+            for member in workspace.members
+        ],
+        createdAt=workspace.createdAt,
+        updatedAt=workspace.updatedAt
+    )
+
 
 @router.post(
     path="/{workspace_id}/projects",

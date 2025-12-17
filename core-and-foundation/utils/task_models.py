@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # TASK MODLES
 
 class TaskCreate(BaseModel):
@@ -52,7 +51,7 @@ class TaskMove(BaseModel):
         json_schema_extra = {
             "example": {
                 "targetColumnId": "123e4567-e89b-12d3-a456-426614174002",
-                "position": 2
+                "position": 10
             }
         }
 
@@ -128,6 +127,36 @@ class LabelAdd(BaseModel):
         json_schema_extra = {
             "example": {
                 "labelId": "123e4567-e89b-12d3-a456-426614174001"
+            }
+        }
+
+class LabelCreate(BaseModel):
+    """Schema for creating a new label"""
+    text: str = Field(..., min_length=1, max_length=100, description="Label text")
+    color: str | None = Field(..., min_length=7, max_length=7, description="Label color (hex code)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "High Priority"
+            }
+        }
+
+class LabelResponse(BaseModel):
+    """Schema for label response"""
+    id: UUID = Field(..., description="Label unique identifier")
+    projectId: UUID = Field(..., description="Project ID")
+    text: str = Field(..., description="Label text")
+    color: str | None = Field(..., description="Label color (hex code)")
+    
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174001",
+                "projectId": "123e4567-e89b-12d3-a456-426614174004",
+                "text": "High Priority",
+                "color": "#FF5733"
             }
         }
 

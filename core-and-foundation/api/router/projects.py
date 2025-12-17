@@ -67,6 +67,8 @@ async def api_get_project(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
+
+
 @router.get(
     path="/{project_id}/board",
     response_model=ProjectBoardResponse,
