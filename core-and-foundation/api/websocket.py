@@ -5,14 +5,14 @@ import json
 import socketio
 from fastapi import APIRouter, Header, Query, WebSocket, WebSocketDisconnect
 
-from configs import get_logger
+from configs import get_logger, nodejs_backend_config
 from websocket.manager import ws_manager
 
 logger = get_logger("websocket")
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
-NODEJS_BACKEND_URL = "http://localhost:8346"
+NODEJS_BACKEND_URL = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
 
 # Tạo client socketio
 sio = socketio.AsyncClient(logger=False, engineio_logger=False)
