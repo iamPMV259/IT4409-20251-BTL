@@ -1,8 +1,0 @@
-mongo:
-  uri: ""
-  db_name: "project_management"
-
-
-nodejs_backend:
-  host: "localhost"
-  port: "8346"
