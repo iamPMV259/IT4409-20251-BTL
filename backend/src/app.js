@@ -1,3 +1,4 @@
+// src/app.js
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -6,12 +7,13 @@ const path = require('path');
 const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
+const http = require('http'); // --- NEW ---
+const SocketService = require('./services/SocketService'); // --- NEW ---
 
 // Load environment variables from .env file
-// Try to load from multiple possible locations
-const envPath = path.resolve(__dirname, '../../.env'); // Try parent's parent (project root)
-const envPathBackend = path.resolve(__dirname, '../.env'); // Try parent (backend folder)
-const envPathCurrent = path.resolve(__dirname, '.env'); // Try current (src folder)
+const envPath = path.resolve(__dirname, '../../.env');
+const envPathBackend = path.resolve(__dirname, '../.env');
+const envPathCurrent = path.resolve(__dirname, '.env');
 
 if (require('fs').existsSync(envPath)) {
     dotenv.config({ path: envPath });
@@ -23,14 +25,12 @@ if (require('fs').existsSync(envPath)) {
     dotenv.config({ path: envPathCurrent });
     console.log('📝 Loading .env from src folder');
 } else {
-    dotenv.config(); // Try default location
+    dotenv.config();
     console.log('📝 Loading .env from default location');
 }
 
-// Import the central router file to mount all application routes
+// Import the central router file
 const apiRoutes = require('./routes/CenterAPIRoutes');
-
-
 const os = require('os');
 
 function getServerIp() {
@@ -55,9 +55,7 @@ const swaggerOptions = {
             title: 'Kanban Project Management API',
             version: '1.0.0',
             description: 'API documentation for Kanban Project Management system',
-            contact: {
-                name: 'API Support',
-            },
+            contact: { name: 'API Support' },
         },
         servers: [
             {
@@ -75,13 +73,9 @@ const swaggerOptions = {
                 },
             },
         },
-        security: [
-            {
-                bearerAuth: [],
-            },
-        ],
+        security: [{ bearerAuth: [] }],
     },
-    apis: ['./src/routes/*.js', './src/controller/*.js'], // Path to the API routes
+    apis: ['./src/routes/*.js', './src/controller/*.js'],
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -89,7 +83,6 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 // Start server
 const startServer = async () => {
     try {
-        // Connect to MongoDB
         if (!process.env.MONGO_URI) {
             console.error("FATAL ERROR: MONGO_URI is not defined.");
             process.exit(1);
@@ -99,10 +92,11 @@ const startServer = async () => {
         const mongoUri = `${process.env.MONGO_URI}/${dbName}`;
         
         console.log('🔄 Connecting to MongoDB...');
+        // Hide password log
         console.log(`📍 URI: ${process.env.MONGO_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}/${dbName}`);
         
         await mongoose.connect(mongoUri, {
-            authSource: 'admin', // Important for Docker MongoDB
+            authSource: 'admin',
         });
         
         console.log('✅ MongoDB Connected: ' + mongoose.connection.host);
@@ -110,26 +104,21 @@ const startServer = async () => {
 
         const app = express();
 
-        // Security Middleware: Set security HTTP headers
         app.use(helmet({
-            contentSecurityPolicy: false, // Disable for Swagger UI
+            contentSecurityPolicy: false,
         }));
 
-        // Body Parser: Allows Express to read JSON data from the request body
         app.use(express.json());
         app.use(cors());
 
-        // Swagger UI Route
         app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
             explorer: true,
             customCss: '.swagger-ui .topbar { display: none }',
             customSiteTitle: 'Kanban API Documentation',
         }));
 
-        // All routes will be prefixed with /api/v1
         app.use('/api/v1', apiRoutes);
 
-        // Simple Health Check Route
         app.get('/', (req, res) => {
             res.json({
                 message: 'Kanban API is running!',
@@ -138,15 +127,22 @@ const startServer = async () => {
             });
         });
 
-        // Fallback for 404 Not Found (must be the last route)
         app.use((req, res, next) => {
             res.status(404).json({ success: false, message: 'Resource Not Found' });
         });
 
-        // Start the server
+        // --- SETUP SERVER WITH SOCKET.IO ---
+        const httpServer = http.createServer(app);
+        
+        // Initialize Socket
+        SocketService.init(httpServer);
+
         const PORT = process.env.PORT || 8346;
-        app.listen(PORT, () => {
+        
+        // Use httpServer.listen instead of app.listen
+        httpServer.listen(PORT, () => {
             console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+            console.log(`📡 Socket.io is ready`);
             console.log(`📚 API Documentation available at: http://localhost:${PORT}/api-docs`);
         });
 
@@ -156,5 +152,4 @@ const startServer = async () => {
     }
 };
 
-// Start the application
 startServer();

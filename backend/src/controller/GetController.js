@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Column = require('../models/Columns');
 const Task = require('../models/Task');
 const Activity = require('../models/Activities');
+const SocketService = require('../services/SocketService');
 
 const generateUUID = () => new mongoose.Types.UUID();
 
@@ -233,6 +234,24 @@ const updateProject = async (req, res) => {
             { $set: updateFields },
             { new: true, runValidators: true }
         ).populate({ path: 'ownerId', select: 'name email avatarUrl' });
+
+        // --- SOCKET EVENT: server:project_updated ---
+        try {
+            SocketService.getIO().to(projectId).emit('server:project_updated', {
+                event: 'server:project_updated',
+                data: {
+                    projectId: updatedProject._id.toString(),
+                    name: updatedProject.name,
+                    description: updatedProject.description,
+                    status: updatedProject.status,
+                    updatedAt: updatedProject.updatedAt,
+                    deadline: updatedProject.deadline
+                }
+            });
+        } catch (socketError) {
+            console.error("Socket emit error:", socketError.message);
+        }
+        // --------------------------------------------
 
         res.status(200).json({
             success: true,

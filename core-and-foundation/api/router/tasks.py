@@ -10,6 +10,7 @@ from api.dependencies import (
     get_current_user,
     get_workspace_by_id,
 )
+from api.websocket import ws_manager
 from hooks.http_errors import NotFoundError, PermissionDeniedError, ValidationError
 from mongo.schemas import (
     Activities,
@@ -28,13 +29,14 @@ from utils.task_models import (
     CommentCreate,
     CommentResponse,
     LabelAdd,
+    LabelCreate,
+    LabelResponse,
     MyTasksFilter,
     TaskCreate,
     TaskMove,
     TaskResponse,
     TaskUpdate,
 )
-from websocket import ws_manager
 
 router = APIRouter(tags=["Tasks"])
 
@@ -117,8 +119,8 @@ async def create_task(
     
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_created",
             task_response.model_dump()
         )
@@ -237,8 +239,8 @@ async def update_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -258,8 +260,14 @@ async def move_task(
     move_data: TaskMove,
     current_user: Annotated[Users, Depends(get_current_user)]
 ):
-    """
-    Move task to different column or position
+    r"""
+    **Move task to different column or position**
+    **Args:**
+    - **task_id**: ID of the task to move
+    - **targetColumnId**: ID of the target column
+    - **position**: (Optional) New position in the target column (0-indexed). If not provided, appends to the end.
+
+
     """
     task = await Tasks.get(task_id)
     if not task:
@@ -284,17 +292,24 @@ async def move_task(
     
     if not new_column:
         raise NotFoundError(f"Target column with ID {new_column_id} not found")
+
+    source_position = None
     
     # Remove from old column's task order
     if old_column and task_id in old_column.taskOrder:
+        source_position = old_column.taskOrder.index(task_id)
         old_column.taskOrder.remove(task_id)
         await old_column.save()
+
+    new_position = move_data.position
     
     # Add to new column's task order at specified position
     if move_data.position is not None:
         position = min(move_data.position, len(new_column.taskOrder))
+        new_position = position
         new_column.taskOrder.insert(position, task_id)
     else:
+        new_position = len(new_column.taskOrder)
         new_column.taskOrder.append(task_id)
     
     await new_column.save()
@@ -336,14 +351,15 @@ async def move_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_moved",
             {
                 "taskId": str(task.id),
                 "sourceColumnId": str(old_column_id),
+                "sourcePosition": source_position,
                 "destColumnId": str(new_column_id),
-                "newPosition": move_data.position
+                "newPosition": new_position
             }
         )
     )
@@ -396,8 +412,8 @@ async def delete_task(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_deleted",
             {
                 "taskId": str(task.id),
@@ -449,8 +465,9 @@ async def add_assignee(
     if not assignee:
         raise NotFoundError("User not found")
     
-    if not check_workspace_access(assignee, workspace):
-        raise ValidationError("User doesn't have access to this workspace")
+    project_members = [member.userId for member in project.members]
+    if assignee_data.userId not in project_members:
+        raise ValidationError("User doesn't have access to this project")
     
     # Add assignee
     task.assignees.append(assignee_data.userId)
@@ -484,8 +501,8 @@ async def add_assignee(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -559,14 +576,16 @@ async def remove_assignee(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
     )
 
     return task_response
+
+
 
 
 @router.post(
@@ -641,8 +660,8 @@ async def add_label(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             task_response.model_dump()
         )
@@ -709,8 +728,8 @@ async def add_comment(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:comment_added",
             comment_response.model_dump()
         )
@@ -777,8 +796,8 @@ async def add_checklist_item(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             TaskResponse(
                 id=task.id,
@@ -864,8 +883,8 @@ async def update_checklist_item(
 
     # Realtime broadcast
     asyncio.create_task(
-        ws_manager.broadcast_to_workspace(
-            str(workspace.id),
+        ws_manager.broadcast_to_project(
+            str(project.id),
             "server:task_updated",
             TaskResponse(
                 id=task.id,

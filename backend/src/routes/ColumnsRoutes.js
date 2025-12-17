@@ -36,12 +36,9 @@ router.use(protect);
  *           schema:
  *             type: object
  *             properties:
- *               name:
- *                 type: string
- *                 example: In Progress
- *               order:
- *                 type: number
- *                 example: 2
+ *               title:
+ *                type: string
+ *                example: Updated Column Title
  *     responses:
  *       200:
  *         description: Column updated successfully

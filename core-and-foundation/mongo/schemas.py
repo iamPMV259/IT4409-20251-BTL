@@ -115,7 +115,7 @@ class Labels(Document):
     id: UUID = Field(default_factory=uuid4, alias="_id")
     projectId: UUID
     text: str
-    color: str  # Hex color code, e.g. "#FF5733"
+    color: str | None = Field(None, description="Label color (hex code)")
 
     class Settings:
         name = "labels"
