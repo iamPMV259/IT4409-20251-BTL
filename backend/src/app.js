@@ -90,7 +90,7 @@ const startServer = async () => {
         
         console.log('Connecting to MongoDB...');
         // Hide password log
-        console.log(`📍 URI: ${process.env.MONGO_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}/${dbName}`);
+        console.log(`URI: ${process.env.MONGO_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}/${dbName}`);
         
         await mongoose.connect(mongoUri, {
             authSource: 'admin',
