@@ -82,7 +82,6 @@ const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Validate input
         if (!email || !password) {
             return res.status(400).json({ 
                 success: false, 
@@ -90,35 +89,32 @@ const loginUser = async (req, res) => {
             });
         }
 
-        console.log("📧 Email received:", email);
+        console.log("Email received:", email);
 
-        // 1. Check for user existence
         const user = await User.findOne({ email });
         
         if (!user) {
-            console.log("❌ User not found in database");
+            console.log("User not found in database");
             return res.status(401).json({ 
                 success: false, 
                 message: 'Invalid credentials' 
             });
         }
 
-        console.log("✅ User found:", user.name);
+        console.log("User found:", user.name);
 
-        // 2. Compare password (using bcrypt)
         const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
         
         if (!isPasswordValid) {
-            console.log("❌ Invalid password");
+            console.log("Invalid password");
             return res.status(401).json({ 
                 success: false, 
                 message: 'Invalid credentials' 
             });
         }
 
-        console.log("✅ Password valid, generating token...");
+        console.log("Password valid, generating token...");
 
-        // 3. Success: Generate and send the token
         const token = generateToken(user._id);
         
         res.json({
@@ -130,7 +126,7 @@ const loginUser = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Login error:", error);
+        console.error("Login error:", error);
         res.status(500).json({ 
             success: false, 
             message: 'Server error during login',

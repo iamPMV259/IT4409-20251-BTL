@@ -23,7 +23,7 @@ const CommentSchema = new mongoose.Schema({
   },
 }, {
   timestamps: true,
-  collection: 'comments' // Explicitly set collection name to match MongoDB
+  collection: 'comments' 
 });
 
 module.exports = mongoose.model('Comment', CommentSchema);

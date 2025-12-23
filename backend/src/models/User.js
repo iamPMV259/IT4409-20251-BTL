@@ -30,12 +30,11 @@ const UserSchema = new mongoose.Schema({
 }, {
     timestamps: true,
     collection: 'users',
-    // --- THÊM PHẦN NÀY ---
     toJSON: {
         getters: true,
         virtuals: true,
         transform: (doc, ret) => {
-            delete ret.passwordHash; // Bảo mật: Luôn xóa passwordHash khi trả về client
+            delete ret.passwordHash; 
             delete ret.__v;
             delete ret.id;
             return ret;

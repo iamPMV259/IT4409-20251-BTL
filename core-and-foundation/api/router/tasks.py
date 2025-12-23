@@ -41,7 +41,6 @@ from utils.task_models import (
 router = APIRouter(tags=["Tasks"])
 
 
-# ==================== MODULE 5: TASKS API ====================
 
 @router.post(
     "/columns/{column_id}/tasks",
@@ -58,23 +57,19 @@ async def create_task(
     """
     Create a new task in a column
     """
-    # Verify column exists and user has access
     column = await Columns.get(column_id)
     if not column:
         raise NotFoundError(f"Column with ID {column_id} not found")
     
-    # Get project to verify access
     project = await Projects.get(column.projectId)
     if not project:
         raise NotFoundError("Project not found")
     
-    # Check if user has access to the workspace
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this workspace")
     
-    # Create new task
     new_task = Tasks(
         title=task_data.title,
         description=task_data.description,
@@ -88,11 +83,9 @@ async def create_task(
     
     await new_task.insert()
     
-    # Update column's task order
     column.taskOrder.append(new_task.id)
     await column.save()
     
-    # Log activity
     activity = Activities(
         projectId=column.projectId,
         taskId=new_task.id,
@@ -117,7 +110,6 @@ async def create_task(
         updatedAt=new_task.updatedAt
     )
     
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -146,7 +138,6 @@ async def get_task(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access through project
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -190,7 +181,6 @@ async def update_task(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -200,7 +190,6 @@ async def update_task(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Update fields
     if task_data.title is not None:
         task.title = task_data.title
     if task_data.description is not None:
@@ -211,8 +200,7 @@ async def update_task(
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
-    # FIX: Dùng model_dump_json() để chuyển Dictionary thành String JSON
+    
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -237,7 +225,6 @@ async def update_task(
         updatedAt=task.updatedAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -273,7 +260,6 @@ async def move_task(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -286,7 +272,6 @@ async def move_task(
     old_column_id = task.columnId
     new_column_id = move_data.targetColumnId
     
-    # Get columns
     old_column = await Columns.get(old_column_id)
     new_column = await Columns.get(new_column_id)
     
@@ -295,7 +280,6 @@ async def move_task(
 
     source_position = None
     
-    # Remove from old column's task order
     if old_column and task_id in old_column.taskOrder:
         source_position = old_column.taskOrder.index(task_id)
         old_column.taskOrder.remove(task_id)
@@ -303,7 +287,6 @@ async def move_task(
 
     new_position = move_data.position
     
-    # Add to new column's task order at specified position
     if move_data.position is not None:
         position = min(move_data.position, len(new_column.taskOrder))
         new_position = position
@@ -314,13 +297,10 @@ async def move_task(
     
     await new_column.save()
     
-    # Update task's column
     task.columnId = new_column_id
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
-    # FIX: Ép kiểu position về string để đảm bảo đúng schema dict[str, str]
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -349,7 +329,6 @@ async def move_task(
         updatedAt=task.updatedAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -384,7 +363,6 @@ async def delete_task(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -394,13 +372,11 @@ async def delete_task(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Remove from column's task order
     column = await Columns.get(task.columnId)
     if column and task_id in column.taskOrder:
         column.taskOrder.remove(task_id)
         await column.save()
     
-    # Log activity before deletion
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -410,7 +386,6 @@ async def delete_task(
     )
     await activity.insert()
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -422,7 +397,6 @@ async def delete_task(
         )
     )
 
-    # Delete task
     await task.delete()
 
     return None
@@ -446,7 +420,6 @@ async def add_assignee(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -456,11 +429,9 @@ async def add_assignee(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Check if user is already assigned
     if assignee_data.userId in task.assignees:
         raise ValidationError("User is already assigned to this task")
     
-    # Verify assignee exists and has access
     assignee = await Users.get(assignee_data.userId)
     if not assignee:
         raise NotFoundError("User not found")
@@ -469,12 +440,10 @@ async def add_assignee(
     if assignee_data.userId not in project_members:
         raise ValidationError("User doesn't have access to this project")
     
-    # Add assignee
     task.assignees.append(assignee_data.userId)
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -499,7 +468,6 @@ async def add_assignee(
         updatedAt=task.updatedAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -529,7 +497,6 @@ async def remove_assignee(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -539,16 +506,13 @@ async def remove_assignee(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Check if user is assigned
     if user_id not in task.assignees:
         raise ValidationError("User is not assigned to this task")
     
-    # Remove assignee
     task.assignees.remove(user_id)
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
     assignee = await Users.get(user_id)
     activity = Activities(
         projectId=task.projectId,
@@ -574,7 +538,6 @@ async def remove_assignee(
         updatedAt=task.updatedAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -606,7 +569,6 @@ async def add_label(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -616,7 +578,6 @@ async def add_label(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Verify label exists and belongs to project
     label = await Labels.get(label_data.labelId)
     if not label:
         raise NotFoundError("Label not found")
@@ -624,16 +585,13 @@ async def add_label(
     if label.projectId != task.projectId:
         raise ValidationError("Label doesn't belong to this project")
     
-    # Check if label is already added
     if label_data.labelId in task.labels:
         raise ValidationError("Label is already added to this task")
     
-    # Add label
     task.labels.append(label_data.labelId)
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -658,7 +616,6 @@ async def add_label(
         updatedAt=task.updatedAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -689,7 +646,6 @@ async def add_comment(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -699,7 +655,6 @@ async def add_comment(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Create comment
     new_comment = Comments(
         taskId=task_id,
         userId=current_user.id,
@@ -708,7 +663,6 @@ async def add_comment(
     
     await new_comment.insert()
     
-    # Log activity
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -726,7 +680,6 @@ async def add_comment(
         createdAt=new_comment.createdAt
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -757,7 +710,6 @@ async def add_checklist_item(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -767,18 +719,15 @@ async def add_checklist_item(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Create checklist item
     new_item = ChecklistItem(
         text=item_data.text,
         checked=item_data.checked or False
     )
     
-    # Add to task's checklists
     task.checklists.append(new_item)
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -788,13 +737,11 @@ async def add_checklist_item(
     )
     await activity.insert()
     
-    # Return the newly created item
     item_response = ChecklistItemResponse(
         text=new_item.text,
         checked=new_item.checked
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -838,7 +785,6 @@ async def update_checklist_item(
     if not task:
         raise NotFoundError(f"Task with ID {task_id} not found")
     
-    # Verify access
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
@@ -848,11 +794,9 @@ async def update_checklist_item(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
     
-    # Check if item exists
     if item_index < 0 or item_index >= len(task.checklists):
         raise NotFoundError("Checklist item not found")
     
-    # Update item
     if item_data.text is not None:
         task.checklists[item_index].text = item_data.text
     if item_data.checked is not None:
@@ -861,8 +805,6 @@ async def update_checklist_item(
     task.updatedAt = datetime.now(timezone.utc)
     await task.save()
     
-    # Log activity
-    # FIX: Dùng model_dump_json() và ép kiểu index thành string
     activity = Activities(
         projectId=task.projectId,
         taskId=task.id,
@@ -875,13 +817,11 @@ async def update_checklist_item(
     )
     await activity.insert()
     
-    # Build response
     item_response = ChecklistItemResponse(
         text=task.checklists[item_index].text,
         checked=task.checklists[item_index].checked
     )
 
-    # Realtime broadcast
     asyncio.create_task(
         ws_manager.broadcast_to_project(
             str(project.id),
@@ -906,7 +846,6 @@ async def update_checklist_item(
     return item_response
 
 
-# ==================== MODULE 6: MY TASKS API ====================
 
 @router.get(
     "/me/tasks",
@@ -924,24 +863,19 @@ async def get_my_tasks(
     """
     Get all tasks assigned to the current user
     """
-    # Base query: all tasks assigned to current user
     query_conditions = [Tasks.assignees == current_user.id]
     
-    # Apply filters
     if project_id:
         query_conditions.append(Tasks.projectId == project_id)
     
     if label_id:
         query_conditions.append(Tasks.labels == label_id)
     
-    # Build query
     if len(query_conditions) == 1:
         tasks = await Tasks.find(query_conditions[0]).to_list()
     else:
-        # Combine multiple conditions
         tasks = await Tasks.find(*query_conditions).to_list()
     
-    # Apply date filters (post-query filtering)
     now = datetime.now(timezone.utc)
     
     if overdue:
@@ -958,7 +892,6 @@ async def get_my_tasks(
             if task.dueDate and now <= task.dueDate <= week_end
         ]
     
-    # Convert to response models
     task_responses = [
         TaskResponse(
             id=task.id,
@@ -977,7 +910,6 @@ async def get_my_tasks(
         for task in tasks
     ]
     
-    # Sort by due date (overdue first, then by date)
     task_responses.sort(
         key=lambda t: (
             t.dueDate if t.dueDate else datetime.max.replace(tzinfo=timezone.utc),

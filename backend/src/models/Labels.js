@@ -20,10 +20,10 @@ const LabelSchema = new mongoose.Schema({
     color: {
         type: String,
         required: true,
-        match: [/^#([0-9A-F]{3}){1,2}$/i, 'Please provide a valid hex color code'], // Simple hex validation
+        match: [/^#([0-9A-F]{3}){1,2}$/i, 'Please provide a valid hex color code'], 
     },
 }, {
-    collection: 'labels' // Explicitly set collection name to match MongoDB
+    collection: 'labels' 
 });
 
 module.exports = mongoose.model('Label', LabelSchema);

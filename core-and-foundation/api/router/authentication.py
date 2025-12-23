@@ -38,27 +38,22 @@ async def register(user_data: UserRegister) -> UserResponse:
     
     Returns the created user information (without password)
     """
-    # Validate password strength
     is_valid, error_msg = validate_password_strength(user_data.password)
     if not is_valid:
         raise ValidationError(error_msg)
     
-    # Check if email already exists
     existing_user = await Users.find_one(Users.email == user_data.email)
     if existing_user:
         raise ConflictError("Email already registered")
     
-    # Hash password
     password_hash = get_password_hash(user_data.password)
     
-    # Create new user
     new_user = Users(
         name=user_data.name,
         email=user_data.email,
         passwordHash=password_hash
     )
     
-    # Save to database
     await new_user.insert()
     
     return UserResponse(
@@ -86,16 +81,13 @@ async def login(credentials: UserLogin)  -> Token:
     
     Returns a JWT access token for authentication
     """
-    # Find user by email
     user = await Users.find_one(Users.email == credentials.email)
     if not user:
         raise AuthenticationError("Incorrect email or password")
     
-    # Verify password
     if not verify_password(credentials.password, user.passwordHash):
         raise AuthenticationError("Incorrect email or password")
     
-    # Create access token
     access_token = create_access_token(data={"sub": str(user.id)})
     
     return Token(

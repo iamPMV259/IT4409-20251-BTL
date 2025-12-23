@@ -21,6 +21,14 @@ class TaskAssigneees(BaseModel):
     userId: str
     name: str
 
+class CommentData(BaseModel):
+    commentId: str
+    userId: str
+    content: str
+    createdAt: datetime
+    taskId: str
+    username: str | None = None
+
 class TaskColumn(BaseModel):
     taskId: str
     title: str
@@ -29,6 +37,7 @@ class TaskColumn(BaseModel):
     dueDate: datetime | None = None
     labels: list[str] | None = []
     checklists: list[str] | None = []
+    comments: list[CommentData] | None = []
 
 
 class ColumnGetResponse(BaseModel):

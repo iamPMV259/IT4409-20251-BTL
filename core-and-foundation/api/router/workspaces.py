@@ -47,12 +47,10 @@ async def get_workspaces(
     
     Requires authentication via Bearer token
     """
-    # Find workspaces where user is owner
     owned_workspaces = await Workspaces.find(
         Workspaces.ownerId == current_user.id
     ).to_list()
     
-    # Find workspaces where user is a member
     all_workspaces = await Workspaces.find().to_list()
     member_workspaces = [
         ws for ws in all_workspaces
@@ -60,7 +58,6 @@ async def get_workspaces(
         and ws.id not in [owned.id for owned in owned_workspaces]
     ]
     
-    # Combine and convert to response models
     workspaces = owned_workspaces + member_workspaces
     
     return [
@@ -102,7 +99,6 @@ async def create_workspace(
     
     Requires authentication via Bearer token
     """
-    # Create new workspace
     new_workspace = Workspaces(
         name=workspace_data.name,
         ownerId=current_user.id,
@@ -114,7 +110,6 @@ async def create_workspace(
         ]
     )
     
-    # Save to database
     await new_workspace.insert()
     
     return WorkspaceResponse(
@@ -161,19 +156,16 @@ async def add_workspace_member(
         - **role**: Role of the new member ('owner', 'admin', 'member'). Default is 'member'.
     """
 
-    # Find the workspace
     workspace = await Workspaces.get(workspace_id)
     if not workspace:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
-    # Check if current user is owner or admin
     if not any(member.userId == current_user.id and member.role in ["owner", "admin"] for member in workspace.members):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owners or admins can add members")
 
-    # Add new members
     for member_data in listed_member:
         if any(member.userId == member_data.userId for member in workspace.members):
-            continue  # Skip if user is already a member
+            continue  
         new_member = WorkspaceMember(
             userId=member_data.userId,
             role=member_data.role
@@ -218,20 +210,16 @@ async def update_workspace(
     
     Requires authentication via Bearer token
     """
-    # Find the workspace
     workspace = await Workspaces.get(workspace_id)
     if not workspace:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     
-    # Check if current user is owner
     if workspace.ownerId != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner can update the workspace")
     
-    # Update workspace details
     workspace.name = workspace_data.name
     workspace.updatedAt = datetime.now(timezone.utc)
     
-    # Save changes
     await workspace.save()
     
     return WorkspaceResponse(
@@ -278,10 +266,9 @@ async def api_create_project(
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
+  
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to create the project
     try:
         return await create_project(
             workspace_id=workspace_id,
@@ -325,10 +312,10 @@ async def api_get_projects(
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
+ 
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to get the projects
+ 
     try:
         return await get_projects(
             workspace_id=workspace_id,

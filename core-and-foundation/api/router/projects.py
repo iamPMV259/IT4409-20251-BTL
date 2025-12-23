@@ -17,7 +17,7 @@ from migrate_nodejs_backend.projects import (
     ProjectDeleteResponse,
     ProjectDetailResponse,
     ProjectUpdateRequest,
-    ProjectUpdateResponse,  # <--- MỚI THÊM
+    ProjectUpdateResponse,
     add_project_member,
     create_project_columns,
     delete_project,
@@ -115,7 +115,7 @@ async def api_get_project_board(
 
 @router.patch(
     path="/{project_id}",
-    response_model=ProjectUpdateResponse,  # <--- ĐÃ SỬA: Dùng model update riêng
+    response_model=ProjectUpdateResponse, 
     status_code=status.HTTP_200_OK,
     summary="Update project details",
     description="Update the details of a specific project by its ID"
@@ -272,7 +272,7 @@ from uuid import UUID
 
 
 @router.post(
-    path="{project_id}/labels",
+    path="/{project_id}/labels",
     response_model=list[LabelResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Create some new labels in the project",
@@ -319,7 +319,7 @@ async def api_create_label(
 
 
 @router.get(
-    path="{project_id}/labels",
+    path="/{project_id}/labels",
     response_model=list[LabelResponse],
     status_code=status.HTTP_200_OK,
     summary="Get all labels in the project",

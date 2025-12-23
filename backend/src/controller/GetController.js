@@ -10,7 +10,6 @@ const SocketService = require('../services/SocketService');
 
 const generateUUID = () => new mongoose.Types.UUID();
 
-// --- HELPER: SO SÁNH ID AN TOÀN ---
 const areIdsEqual = (id1, id2) => {
     if (!id1 || !id2) return false;
     return id1.toString() === id2.toString();
@@ -31,7 +30,6 @@ const getAllWorkspaces = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Workspace not found' });
         }
 
-        // Check Membership
         const isMember = workspace.members.some(m => areIdsEqual(m.userId, userId));
         const isOwner = areIdsEqual(workspace.ownerId, userId);
 
@@ -74,7 +72,6 @@ const createProject = async (req, res) => {
             return res.status(403).json({ success: false, message: "Only workspace owners can create new projects" });
         }
         
-        // 1. Prepare Members Data
         const memberData = [
             { userId: userId, role: 'owner' }
         ];
@@ -87,7 +84,6 @@ const createProject = async (req, res) => {
             });
         }
 
-        // 2. Create Project
         const projectId = generateUUID();
         const newProject = await Project.create({
             _id: projectId,
@@ -100,7 +96,6 @@ const createProject = async (req, res) => {
             deadline: deadline ? new Date(deadline) : undefined 
         });
         
-        // 3. Initialize default columns
         const defaultColumns = ['To Do', 'In Progress', 'Done'];
         const columnIds = [];
         const createdColumns = [];
@@ -117,7 +112,6 @@ const createProject = async (req, res) => {
             createdColumns.push(column);
         }
         
-        // 4. Update Project with column order
         await Project.findByIdAndUpdate(projectId, {
             columnOrder: columnIds,
         }, { new: true });
@@ -159,7 +153,6 @@ const getProjectDetail = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Project not found' });
         }
 
-        // Check Authorization
         const ownerId = project.ownerId._id || project.ownerId;
         const isOwner = areIdsEqual(ownerId, userId);
 
@@ -235,7 +228,6 @@ const updateProject = async (req, res) => {
             { new: true, runValidators: true }
         ).populate({ path: 'ownerId', select: 'name email avatarUrl' });
 
-        // --- SOCKET EVENT: server:project_updated ---
         try {
             SocketService.getIO().to(projectId).emit('server:project_updated', {
                 event: 'server:project_updated',
@@ -251,7 +243,6 @@ const updateProject = async (req, res) => {
         } catch (socketError) {
             console.error("Socket emit error:", socketError.message);
         }
-        // --------------------------------------------
 
         res.status(200).json({
             success: true,
@@ -269,7 +260,6 @@ const updateProject = async (req, res) => {
  * @route DELETE /api/v1/projects/:projectId
  */
 const deleteProject = async (req, res) => {
-    // ⚠️ No Transaction (For Standalone Mongo)
     try {
         const { projectId } = req.params;
         const userId = req.user._id;
@@ -308,22 +298,19 @@ const deleteProject = async (req, res) => {
 const addProjectMembers = async (req, res) => {
     try {
         const { projectId } = req.params;
-        let { newMemberEmails } = req.body; // Dùng let để có thể modify
+        let { newMemberEmails } = req.body; 
         const inviterId = req.user._id;
 
-        // 1. Validate Input cơ bản
         if (!newMemberEmails || !Array.isArray(newMemberEmails)) {
             return res.status(400).json({ success: false, message: 'Must provide a list of new member emails.' });
         }
 
-        // --- FIX QUAN TRỌNG: Làm phẳng mảng để tránh lỗi nested array [["email"]] ---
         newMemberEmails = newMemberEmails.flat();
 
         if (newMemberEmails.length === 0) {
             return res.status(400).json({ success: false, message: 'Email list cannot be empty.' });
         }
 
-        // 2. Fetch Project & Check Auth
         const project = await Project.findById(projectId);
         if (!project) {
             return res.status(404).json({ success: false, message: 'Project not found.' });
@@ -336,10 +323,8 @@ const addProjectMembers = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Not authorized to add members.' });
         }
 
-        // 3. Tìm Users trong Database
         const usersToAdd = await User.find({ email: { $in: newMemberEmails } });
 
-        // 4. Kiểm tra xem có email nào không tồn tại không
         const foundEmails = usersToAdd.map(u => u.email);
         const notFoundEmails = newMemberEmails.filter(email => !foundEmails.includes(email));
 
@@ -351,17 +336,13 @@ const addProjectMembers = async (req, res) => {
             });
         }
 
-        // 5. Lọc ra những người chưa là thành viên
         const newMemberObjects = [];
         const addedUsersInfo = [];
 
-        // Lấy danh sách ID thành viên hiện tại (chuyển về String)
         const currentMemberIds = project.members.map(m => m.userId.toString());
-        // Thêm cả Owner vào danh sách check (đề phòng)
         if (project.ownerId) currentMemberIds.push(project.ownerId.toString());
 
         usersToAdd.forEach(user => {
-            // Chỉ thêm nếu chưa tồn tại trong project
             if (!currentMemberIds.includes(user._id.toString())) {
                 newMemberObjects.push({ userId: user._id, role: 'member' });
                 addedUsersInfo.push({ id: user._id, name: user.name, email: user.email });
@@ -376,7 +357,6 @@ const addProjectMembers = async (req, res) => {
             });
         }
 
-        // 6. Cập nhật Project
         const updatedProject = await Project.findByIdAndUpdate(
             projectId,
             { $push: { members: { $each: newMemberObjects } } },

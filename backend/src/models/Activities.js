@@ -24,15 +24,13 @@ const ActivitySchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        // Ví dụ về các giá trị: 'CREATED_TASK', 'MOVED_TASK', 'ADDED_COMMENT', 'CHANGED_ASSIGNEE'
     },
     details: {
-        type: mongoose.Schema.Types.Mixed, // Sử dụng Mixed cho dữ liệu ngữ cảnh linh hoạt
-        // Ví dụ: { fromColumn: 'Todo', toColumn: 'In Progress' }
+        type: mongoose.Schema.Types.Mixed, 
     },
 }, {
     timestamps: true,
-    collection: 'activities' // Explicitly set collection name to match MongoDB
+    collection: 'activities' 
 });
 
 module.exports = mongoose.model('Activity', ActivitySchema);
