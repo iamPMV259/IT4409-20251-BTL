@@ -331,3 +331,56 @@ async def api_get_projects(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except InternalServerError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+from uuid import UUID
+
+from mongo.schemas import Projects
+
+
+class JoinedProjectResponse(BaseModel):
+    role: str
+    project_id: str
+    project_name: str
+
+@router.get(
+    "/joined_projects",
+    response_model=list[JoinedProjectResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get joined projects",
+    description="Get all projects that the current user has joined. If `workspace_id` is provided, filter projects by that workspace. Else, get joined projects across all workspaces."
+)
+async def get_joined_projects(
+    current_user: Annotated[Users, Depends(get_current_user)],
+    workspace_id: str | None = None
+):
+    r"""
+    Get all projects that the current user has joined. If `workspace_id` is provided, filter projects by that workspace. Else, get joined projects across all workspaces.
+    
+    Returns a list of projects where the user is a member.
+    
+    Requires authentication via Bearer token.
+    """
+    # Fetch all projects
+    if workspace_id:
+        all_projects = await Projects.find(Projects.workspaceId == UUID(workspace_id)).to_list()
+    else:
+        all_projects = await Projects.find_all().to_list()
+
+    joined_projects = []
+
+    for project in all_projects:
+        for member in project.members:
+            if member.userId == current_user.id:
+                joined_projects.append(
+                    JoinedProjectResponse(
+                        role=member.role,
+                        project_id=str(project.id),
+                        project_name=project.name
+                    )
+                )
+                break  # No need to check other members for this project
+    
+    
+    
+    return joined_projects
