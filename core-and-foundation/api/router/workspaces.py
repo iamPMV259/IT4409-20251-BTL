@@ -342,6 +342,7 @@ class JoinedProjectResponse(BaseModel):
     role: str
     project_id: str
     project_name: str
+    workspace_id: str | None = None
 
 @router.get(
     "/joined_projects",
@@ -376,7 +377,8 @@ async def get_joined_projects(
                     JoinedProjectResponse(
                         role=member.role,
                         project_id=str(project.id),
-                        project_name=project.name
+                        project_name=project.name,
+                        workspace_id=str(project.workspaceId)
                     )
                 )
                 break  # No need to check other members for this project
