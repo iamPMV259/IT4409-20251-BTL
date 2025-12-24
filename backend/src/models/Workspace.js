@@ -16,14 +16,13 @@ const WorkspaceSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  // Lưu trữ IDs người dùng
   members: [{
     type: mongoose.Schema.Types.UUID,
     ref: 'User',
   }],
 }, {
   timestamps: true,
-  collection: 'workspaces' // Explicitly set collection name to match MongoDB
+  collection: 'workspaces' 
 });
 
 module.exports = mongoose.model('Workspace', WorkspaceSchema);

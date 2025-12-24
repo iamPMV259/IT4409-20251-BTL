@@ -1,17 +1,14 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User'); 
 
-// Middleware function to protect routes
 exports.protect = async (req, res, next) => {
     let token;
 
-    // Step 1: Extract token from "Authorization: Bearer <token>" header
     if (req.headers.authorization && 
         req.headers.authorization.startsWith('Bearer')) {
         token = req.headers.authorization.split(' ')[1];
     }
 
-    // If no token found, return error immediately
     if (!token) {
         return res.status(401).json({ 
             success: false, 
@@ -20,7 +17,6 @@ exports.protect = async (req, res, next) => {
     }
 
     try {
-        // Step 2: Verify token signature & expiration with HS256 algorithm
         const decoded = jwt.verify(token, process.env.JWT_SECRET, {
             algorithms: [process.env.JWT_ALGORITHM || 'HS256']
         });
@@ -29,7 +25,6 @@ exports.protect = async (req, res, next) => {
         if (!userId) {
             return res.status(401).json({ success: false, message: 'Token payload invalid (no id or sub)' });
         }
-        // Step 3: Fetch user from database (exclude password)
         req.user = await User.findById(userId).select('-passwordHash');
         
         if (!req.user) {
@@ -39,7 +34,7 @@ exports.protect = async (req, res, next) => {
             });
         }
         
-        next();  // ← Allow request to proceed
+        next(); 
 
     } catch (error) {
         console.error('JWT Verification Error:', error.message);

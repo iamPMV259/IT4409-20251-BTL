@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import đầy đủ các router
 from api.router import authentication, columns, projects, tasks, workspaces
 from api.websocket import (
     count_active_connections,
@@ -13,8 +12,6 @@ from api.websocket import (
     start_socketio_client,
     stop_socketio_client,
 )
-
-# Import router websocket và các hàm lifecycle
 from api.websocket import router as ws_router
 from clients import Clients
 from configs import get_logger
@@ -27,17 +24,12 @@ logger = get_logger("api-main")
 async def lifespan(app: FastAPI):
     logger.info("Starting up API application...")
     
-    # 1. Khởi tạo MongoDB
     await mongo_clients.initialize()
     
-    # 2. Khởi tạo kết nối Socket tới Node.js (Chạy ngầm)
-    # Lưu ý: Nếu Node.js chưa bật, nó sẽ log lỗi nhưng không crash app.
-    # Cơ chế reconnect ở websocket.py sẽ xử lý sau.
     await start_socketio_client()
     
     yield
     
-    # Cleanup
     logger.info("Shutting down API application...")
     await stop_socketio_client()
     await mongo_clients.close()
@@ -65,7 +57,7 @@ app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(columns.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
-app.include_router(ws_router) # Không cần prefix, đường dẫn gốc là /ws/...
+app.include_router(ws_router)
 
 
 @app.get(path="/", summary="Health Check", tags=["Health"])

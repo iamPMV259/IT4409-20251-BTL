@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -16,12 +17,13 @@ from migrate_nodejs_backend.columns import (
     ColumnGetResponse,
     ColumnResponse,
     ColumnUpdateRequest,
+    CommentData,
     TaskAssigneees,
     TaskColumn,
     delete_column,
     update_column,
 )
-from mongo.schemas import Columns, Labels, Tasks, Users
+from mongo.schemas import Columns, Comments, Labels, Tasks, Users
 
 logger = get_logger("columns")
 
@@ -58,10 +60,10 @@ async def api_update_column(
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
+ 
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to update the column
+  
     try:
         return await update_column(column_id=column_id, update_data=update_data, token=bearer_token)
     except AuthenticationError as e:
@@ -100,10 +102,10 @@ async def api_delete_column(
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
-    # Login to Node.js backend to get token
+ 
     bearer_token = auth_header[len("Bearer "):]
     
-    # Call the migrate_nodejs_backend function to delete the column
+  
     try:
         return await delete_column(column_id=column_id, token=bearer_token)
     except AuthenticationError as e:
@@ -161,7 +163,24 @@ async def api_get_column(
             label = await Labels.get(label_id)
             if not label:
                 continue
-            labels_info.append(label.name)
+            labels_info.append(label.text)
+
+        comments_task = await Comments.find(
+            Comments.taskId == task.id
+        ).to_list()
+        comments_info = []
+        for comment in comments_task:
+            user = await Users.find_one(Users.id == comment.userId)
+            if user:
+                comments_info.append(CommentData(
+                    commentId=str(comment.id),
+                    userId=str(comment.userId),
+                    content=comment.content,
+                    createdAt=comment.createdAt,
+                    taskId=str(comment.taskId),
+                    username=user.name if user else None
+                ))
+        
         task_column = TaskColumn(
             taskId=str(task.id),
             title=task.title,
@@ -169,6 +188,7 @@ async def api_get_column(
             assignees=assignees_info,
             dueDate=task.dueDate,
             labels=labels_info,
+            comments=comments_info
         )
         task_orders.append(task_column)
 

@@ -26,7 +26,6 @@ def _is_uuid(value: str) -> bool:
     return bool(uuid_pattern.match(value))
 
 
-# --- COMMON MODELS ---
 
 class TaskStats(BaseModel):
     open: int
@@ -78,7 +77,6 @@ class OwnerInfo(BaseModel):
         super().__init__(**data)
 
 
-# --- GET SINGLE PROJECT MODELS (FULLY POPULATED) ---
 
 class ProjectMemberDetailed(BaseModel):
     user: UserInfo
@@ -166,9 +164,6 @@ async def get_project(project_id: str, token: str) -> ProjectDetailResponse:
                 raise InternalServerError(f"Retrieval failed: {error_message}")
 
 
-# --- UPDATE PROJECT MODELS (PARTIALLY POPULATED) ---
-# FIX: API Update của Node.js KHÔNG populate members, chỉ populate owner.
-# Do đó cần model riêng chấp nhận members là { userId: "string", role: "string" }
 
 class ProjectMemberSimple(BaseModel):
     user_id: str
@@ -177,7 +172,6 @@ class ProjectMemberSimple(BaseModel):
     @field_validator("user_id", mode="before")
     @classmethod
     def convert_user_id(cls, v):
-        # Nếu lỡ Node populate object thì lấy ID, nếu là string thì giữ nguyên
         if isinstance(v, dict):
             return v.get("_id") or v.get("id")
         if v and not _is_uuid(v):
@@ -197,8 +191,8 @@ class ProjectUpdateData(BaseModel):
     name: str
     description: Optional[str] = None
     workspace_id: str
-    owner: UserInfo # Node Update API CÓ populate owner
-    members: List[ProjectMemberSimple] # Node Update API KHÔNG populate members (trả về userId string)
+    owner: UserInfo 
+    members: List[ProjectMemberSimple] 
     status: str
     column_order: List[str]
     task_stats: TaskStats
@@ -258,7 +252,6 @@ async def update_project(project_id: str, update_data: ProjectUpdateRequest, tok
             if response.status == 200:
                 data = await response.json()
                 logger.info(f"Project {project_id} updated successfully.")
-                # Sử dụng ProjectUpdateResponse thay vì ProjectDetailResponse
                 return ProjectUpdateResponse.model_validate(data)
             elif response.status == 401:
                 raise AuthenticationError("Invalid or expired token.")
@@ -274,7 +267,7 @@ async def update_project(project_id: str, update_data: ProjectUpdateRequest, tok
                 raise InternalServerError(f"Update failed: {error_message}")
 
 
-# --- DELETE PROJECT ---
+
 
 class ProjectDeleteResponse(BaseModel):
     success: bool
@@ -308,7 +301,6 @@ async def delete_project(project_id: str, token: str) -> ProjectDeleteResponse:
                 raise InternalServerError(f"Deletion failed: {error_message}")
 
 
-# --- GET BOARD ---
 
 class BoardProjectMember(BaseModel):
     user_id: str
@@ -420,7 +412,6 @@ async def get_project_board(project_id: str, token: str) -> ProjectBoardResponse
                 raise InternalServerError(f"Retrieval failed: {error_message}")
 
 
-# --- ADD MEMBER ---
 
 class ProjectAddMemberData(BaseModel):
     id: str
@@ -528,7 +519,6 @@ async def add_project_member(project_id: str, member_email: List[str], token: st
                 raise InternalServerError(f"Addition failed: {error_message}")
 
 
-# --- CREATE COLUMN ---
 
 class ColumnData(BaseModel):
     id: str
@@ -598,7 +588,6 @@ async def create_project_columns(project_id: str, column_title: str, token: str)
                 raise InternalServerError(f"Creation failed: {error_message}")
 
 
-# --- GET PROJECTS LIST ---
 
 class ProjectMember(BaseModel):
     user_id: str
