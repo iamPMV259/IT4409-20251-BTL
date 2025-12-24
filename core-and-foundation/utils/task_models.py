@@ -64,6 +64,13 @@ class ChecklistItemSchema(BaseModel):
     class Config:
         from_attributes = True
 
+class CommentData(BaseModel):
+    userId: str
+    username: str
+    commentId: str
+    content: str
+    createdAt: datetime
+
 
 class TaskResponse(BaseModel):
     """Schema for task response"""
@@ -79,6 +86,7 @@ class TaskResponse(BaseModel):
     checklists: List[ChecklistItemSchema] = Field(default_factory=list, description="Checklist items")
     createdAt: datetime = Field(..., description="Creation timestamp")
     updatedAt: datetime = Field(..., description="Last update timestamp")
+    comments: list[CommentData] | None = Field(default=None, description="Comments on the task")
     
     class Config:
         from_attributes = True
@@ -98,7 +106,16 @@ class TaskResponse(BaseModel):
                     {"text": "Create login endpoint", "checked": False}
                 ],
                 "createdAt": "2024-12-01T10:00:00Z",
-                "updatedAt": "2024-12-05T15:30:00Z"
+                "updatedAt": "2024-12-05T15:30:00Z",
+                "comments": [
+                    {
+                        "commentId": "123e4567-e89b-12d3-a456-426614174006",
+                        "userId": "123e4567-e89b-12d3-a456-426614174000",
+                        "username": "Alice",
+                        "content": "I've completed the initial implementation. Ready for review.",
+                        "createdAt": "2024-12-05T16:00:00Z"
+                    }
+                ]
             }
         }
 

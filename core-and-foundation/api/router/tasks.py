@@ -27,6 +27,7 @@ from utils.task_models import (
     ChecklistItemResponse,
     ChecklistItemUpdate,
     CommentCreate,
+    CommentData,
     CommentResponse,
     LabelAdd,
     LabelCreate,
@@ -142,10 +143,24 @@ async def get_task(
     if not project:
         raise NotFoundError("Project not found")
     
-    from mongo.schemas import Workspaces
+    from mongo.schemas import Comments, Workspaces
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
+
+    comments = await Comments.find(Comments.taskId == task.id).to_list()
+    comments_info = []
+    for comment in comments:
+        user = await Users.find_one(Users.id == comment.userId)
+        if user:
+            comments_info.append(CommentData(
+                commentId=str(comment.id),
+                userId=str(comment.userId),
+                username=user.name,
+                content=comment.content,
+                createdAt=comment.createdAt
+            ))
+    
     
     return TaskResponse(
         id=task.id,
@@ -159,7 +174,8 @@ async def get_task(
         labels=task.labels,
         checklists=task.checklists,
         createdAt=task.createdAt,
-        updatedAt=task.updatedAt
+        updatedAt=task.updatedAt,
+        comments=comments_info
     )
 
 
