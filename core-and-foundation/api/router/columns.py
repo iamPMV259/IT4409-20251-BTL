@@ -163,7 +163,7 @@ async def api_get_column(
             label = await Labels.get(label_id)
             if not label:
                 continue
-            labels_info.append(label.name)
+            labels_info.append(label.text)
 
         comments_task = await Comments.find(
             Comments.taskId == task.id
