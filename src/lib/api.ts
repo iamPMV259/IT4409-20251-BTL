@@ -1,92 +1,15 @@
 import axios from 'axios';
 
-// 1. Cập nhật Interfaces khớp với Server thật
-export interface User {
-  id: string; // Server trả về 'id', không phải '_id'
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
+// --- CONFIGURATION ---
+const BASE_URL = '/api/v1';
 
-export interface AuthResponse {
-  access_token: string; // Server trả về 'access_token'
-  token_type: string;
-}
-
-export interface WorkspaceMember {
-  role: string;
-  userId: string;
-}
-
-export interface Workspace {
-  id: string;
-  name: string;
-  ownerId: string;
-  members: WorkspaceMember[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  status?: string;
-  members?: any[];
-}
-
-// --- Interface mới cho Task ---
-export interface ChecklistItem {
-  text: string;
-  checked: boolean;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  columnId: string;
-  projectId: string;
-  creatorId: string;
-  // Backend trả về mảng ID, nhưng UI cần hiển thị thông tin. 
-  // Tạm thời để string[], sau này sẽ map với danh sách members của Project
-  assignees: string[]; 
-  labels: string[];    
-  dueDate?: string;
-  checklists?: ChecklistItem[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Interface cho payload tạo/sửa
-export interface CreateTaskPayload {
-  title: string;
-  description?: string;
-  dueDate?: string;
-  assignees?: string[];
-  labels?: string[];
-}
-
-export interface UpdateTaskPayload {
-  title?: string;
-  description?: string;
-  dueDate?: string;
-  assignees?: string[];
-  labels?: string[];
-  columnId?: string; // Dành cho việc di chuyển task (nếu API update hỗ trợ hoặc dùng endpoint riêng)
-}
-
-// 2. Cấu hình URL Server thật
 const api = axios.create({
-  baseURL: 'http://131.153.239.187:8345/api/v1', 
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 3. Interceptor (Giữ nguyên logic)
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
@@ -98,78 +21,363 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// 4. Cập nhật Endpoints
+// ==========================================
+//                 TYPES
+// ==========================================
+
+// --- AUTH & USER ---
+export interface UserResponse {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+}
+
+// --- WORKSPACE ---
+export interface WorkspaceMember {
+  userId: string;
+  role: string;
+}
+
+export interface WorkspaceResponse {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: WorkspaceMember[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- PROJECT ---
+export interface OwnerInfo {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url?: string | null;
+}
+
+export interface ProjectMember {
+  user_id: string;
+  role: string;
+}
+
+export interface TaskStats {
+  open: number;
+  closed: number;
+}
+
+// Dữ liệu Project khi lấy danh sách (GET /projects)
+export interface ProjectGetData {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace_id: string;
+  // owner: OwnerInfo;
+  // members: ProjectMember[];
+  status?: string;
+  task_stats?: TaskStats;
+  deadline?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Dữ liệu Project chi tiết (GET /projects/:id)
+export interface ProjectDetailData extends ProjectGetData {
+  column_order: string[]; // Chỉ chứa ID các cột
+}
+
+export interface ProjectCreateRequest {
+  name: string;
+  description: string;
+  deadline?: string | null;
+}
+
+export interface ProjectCreatedResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id: string;
+    name: string;
+    description?: string;
+    workspace_id: string;
+    owner_id: string;
+    // ... các trường khác
+  };
+  initial_columns: any[];
+}
+
+export interface ProjectGetResponse {
+  success: boolean;
+  count: number;
+  data: ProjectGetData[];
+}
+
+// --- COLUMN ---
+export interface ColumnData {
+  id: string;
+  title: string;
+  project_id: string;
+  task_order: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ColumnResponse {
+  success: boolean;
+  message: string;
+  data: ColumnData;
+}
+
+// --- TASK ---
+export interface ChecklistItem {
+  text: string;
+  checked: boolean;
+}
+
+export interface TaskResponse {
+id: string;
+  title: string;
+  description?: string | null;
+  projectId: string;
+  columnId: string;
+  creatorId: string;
+assignees: string[]; 
+  labels: string[];   
+  dueDate?: string | null;
+checklists: { text: string; checked: boolean }[];
+comments?: Comment[];  
+createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskCreate {
+  title: string;
+  description?: string;
+  dueDate?: string;
+  assignees?: string[];
+  labels?: string[];
+}
+
+export interface TaskUpdate {
+  title?: string;
+  description?: string;
+  dueDate?: string;
+}
+
+// --- 1. THÊM TYPES CHO BOARD (Dựa trên Schema BoardData) ---
+export interface BoardProject {
+  id: string;
+  name: string;
+  owner_id: string;
+  column_order: string[];
+  // members... (có thể thêm nếu cần)
+}
+
+export interface BoardColumn {
+  id: string;
+  title: string;
+  project_id: string;
+  tasks: TaskResponse[]; // Mảng task nằm ngay trong column
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoardData {
+  project: BoardProject;
+  columns: BoardColumn[];
+}
+
+// --- THÊM TYPE CHO COMMENT ---
+export interface Comment {
+commentId: string; // JSON trả về 'commentId', không phải 'id'
+  userId: string;
+  content: string;
+  createdAt: string;
+  taskId: string;
+  username?: string; // JSON có field này, rất tiện để hiển thị tên
+}
+// 2. Cập nhật Interface Assignee (Theo JSON mẫu)
+export interface TaskAssignee {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+// --- TYPE CHO LABELS ---
+export interface Label {
+  id: string;
+  projectId: string;
+  text: string;
+  color: string; // Hex code: #FF0000
+}
+
+export interface LabelCreate {
+  text: string;
+  color: string;
+}
+
+// --- MỚI: Type cho Joined Project (Dashboard) ---
+// Dựa trên schema JoinedProjectResponse trong OpenAPI mới
+export interface JoinedProject {
+  role: string;
+  project_id: string;
+  project_name: string;
+  workspace_id?: string | null;
+  // Các trường bổ sung (Cần Backend trả về thêm trong tương lai)
+  description?: string;
+  status?: string;      // 'active', 'completed', 'on_hold'...
+  deadline?: string;    // ISO Date string
+  task_stats?: {        // Thống kê task để vẽ progress bar
+    open: number;
+    closed: number;
+  };
+}
+// ==========================================
+//              API CLIENTS
+// ==========================================
+
 export const authApi = {
-  // Login trả về access_token
   login: (email: string, password: string) => 
-    api.post<AuthResponse>('/auth/login', { email, password }),
+    api.post<TokenResponse>('/auth/login', { email, password }),
   
-  // Register trả về User object
   register: (name: string, email: string, password: string) => 
-    api.post<User>('/auth/register', { name, email, password }),
+    api.post<UserResponse>('/auth/register', { name, email, password }),
   
-  // Get Me đổi path thành /auth/me
   getMe: () => 
-    api.get<User>('/auth/me'),
+    api.get<UserResponse>('/auth/me'),
 };
 
-// Cập nhật hàm gọi API Workspace
 export const workspaceApi = {
-  // GET /api/v1/workspaces
-  getAll: () => api.get<Workspace[]>('/workspaces'),
+  getAll: () => 
+    api.get<WorkspaceResponse[]>('/workspaces'),
   
-  // POST /api/v1/workspaces
-  create: (name: string) => api.post<Workspace>('/workspaces', { name }),
+  create: (name: string) => 
+    api.post<WorkspaceResponse>('/workspaces', { name }),
+  
+  getProjects: (workspaceId: string) =>
+    api.get<ProjectGetResponse>(`/workspaces/${workspaceId}/projects`),
+
+  createProject: (workspaceId: string, data: ProjectCreateRequest) =>
+    api.post<ProjectCreatedResponse>(`/workspaces/${workspaceId}/projects`, data),
+  // --- MỚI: API QUAN TRỌNG ĐỂ FIX DASHBOARD ---
+  // GET /api/v1/workspaces/joined_projects
+  getJoinedProjects: (workspaceId?: string) => 
+    api.get<JoinedProject[]>('/workspaces/joined_projects', {
+      params: workspaceId ? { workspace_id: workspaceId } : {}
+    }),
 };
 
 export const projectApi = {
-  getAllByWorkspace: (workspaceId: string) => 
-    api.get<Project[]>(`/workspaces/${workspaceId}/projects`),
-  
-  create: (workspaceId: string, data: { name: string; description?: string }) => 
-    api.post<Project>(`/workspaces/${workspaceId}/projects`, data),
+
+  // THÊM: API lấy toàn bộ bảng (Project + Columns + Tasks)
+  getBoard: (projectId: string) =>
+    api.get<{ success: boolean; data: BoardData }>(`/projects/${projectId}/board`),
+  // GET /api/v1/projects/{id}
+  getDetail: (projectId: string) =>
+    api.get<{ success: boolean; data: ProjectDetailData }>(`/projects/${projectId}`),
     
-  getDetail: (id: string) => api.get<Project>(`/projects/${id}`),
+  // THÊM: Mời thành viên vào dự án
+  addMember: (projectId: string, email: string) =>
+    api.post(`/projects/${projectId}/members`, [email]), // Backend yêu cầu mảng string
+
+  // POST /api/v1/projects/{id}/columns
+  // Lưu ý: column_title gửi qua Query Params theo OpenAPI mới
+  createColumn: (projectId: string, columnTitle: string) =>
+    api.post<ColumnResponse>(
+      `/projects/${projectId}/columns`, 
+      {}, // Body rỗng
+      { params: { column_title: columnTitle } }
+    ),
+
+  // Lấy danh sách Label của Project
+  getLabels: (projectId: string) =>
+    api.get<Label[]>(`/projects/${projectId}/labels`),
+
+  // // Tạo Label mới cho Project
+  // createLabels: (projectId: string, labels: LabelCreate[]) =>
+  //   api.post<Label[]>(`/projects/${projectId}/labels`, labels),
+  // Cập nhật thông tin dự án
+  update: (projectId: string, data: { name?: string; description?: string; deadline?: string; status?: string }) =>
+    api.patch(`/projects/${projectId}`, data),
+
+  // Xóa dự án
+  delete: (projectId: string) => 
+    api.delete(`/projects/${projectId}`),
+    
+  // Tạo nhãn mới (Cho tính năng tiếp theo)
+  createLabel: (projectId: string, data: { text: string; color: string }[]) =>
+    api.post(`/projects/${projectId}/labels`, data),
 };
 
-// Interface cho payload Move Task
-export interface MoveTaskPayload {
-  position: number; // Index mới trong cột
-  targetColumnId: string;
-}
+export const columnApi = {
+  create: (projectId: string, title: string) =>
+    api.post(`/projects/${projectId}/columns`, null, {
+      params: { column_title: title }
+    }),
+
+  // Cập nhật tên cột
+  update: (columnId: string, title: string) =>
+    api.patch(`/columns/${columnId}`, { title }),
+
+  // Xóa cột
+  delete: (columnId: string) => 
+    api.delete(`/columns/${columnId}`),
+};
 
 export const taskApi = {
-  // POST /api/v1/columns/{column_id}/tasks
-  create: (columnId: string, data: CreateTaskPayload) => 
-    api.post<Task>(`/columns/${columnId}/tasks`, data),
+  // POST /api/v1/columns/{id}/tasks
+  create: (columnId: string, data: TaskCreate) => 
+    api.post<TaskResponse>(`/columns/${columnId}/tasks`, data),
 
-  // GET /api/v1/tasks/{task_id}
-  getDetail: (taskId: string) => 
-    api.get<Task>(`/tasks/${taskId}`),
+  // GET /api/v1/tasks/{id}
+  getDetail: (taskId: string) => api.get<TaskResponse>(`/tasks/${taskId}`),
+  
+  // PATCH /api/v1/tasks/{id}
+  update: (taskId: string, data: TaskUpdate) => 
+    api.patch<TaskResponse>(`/tasks/${taskId}`, data),
+    
+  // DELETE /api/v1/tasks/{id}
+  delete: (taskId: string) => api.delete(`/tasks/${taskId}`),
+  
+  // PATCH /api/v1/tasks/{id}/move
+  move: (taskId: string, data: { targetColumnId: string; position: number }) =>
+    api.patch<TaskResponse>(`/tasks/${taskId}/move`, data),
 
-  // PATCH /api/v1/tasks/{task_id}
-  update: (taskId: string, data: UpdateTaskPayload) => 
-    api.patch<Task>(`/tasks/${taskId}`, data),
+  // THÊM: Gửi bình luận
+  addComment: (taskId: string, content: string) =>
+    api.post<Comment>(`/tasks/${taskId}/comments`, { content }),
+  // Thêm Label vào Task
+  addLabel: (taskId: string, labelId: string) =>
+    api.post(`/tasks/${taskId}/labels`, { labelId }),
+    
+  // Xóa Label khỏi Task (Dùng PATCH update list ID nếu không có API Delete riêng)
+  // Workaround: Gửi PATCH update toàn bộ list labels
+  updateLabels: (taskId: string, labelIds: string[]) =>
+    api.patch(`/tasks/${taskId}`, { labels: labelIds }),
 
-  // DELETE /api/v1/tasks/{task_id}
-  delete: (taskId: string) => 
-    api.delete(`/tasks/${taskId}`),
+  // Thêm người vào Task
+  addAssignee: (taskId: string, userId: string) =>
+    api.post(`/tasks/${taskId}/assignees`, { userId }),
+    
+  // Xóa người khỏi Task
+  removeAssignee: (taskId: string, userId: string) =>
+    api.delete(`/tasks/${taskId}/assignees/${userId}`),
+  // --- MỚI: CHECKLIST API ---
+  addChecklistItem: (taskId: string, text: string) =>
+    api.post(`/tasks/${taskId}/checklist-items`, { text, checked: false }),
 
-  // PATCH /api/v1/tasks/{task_id}/move
-  move: (taskId: string, data: MoveTaskPayload) => 
-    api.patch<Task>(`/tasks/${taskId}/move`, data),
-
-  // POST /api/v1/tasks/{task_id}/assignees
-  addAssignee: (taskId: string, userId: string) => 
-    api.post<Task>(`/tasks/${taskId}/assignees`, { userId }),
-
-  // DELETE /api/v1/tasks/{task_id}/assignees/{user_id}
-  removeAssignee: (taskId: string, userId: string) => 
-    api.delete<Task>(`/tasks/${taskId}/assignees/${userId}`),
-
-  // POST /api/v1/tasks/{task_id}/labels
-  addLabel: (taskId: string, labelId: string) => 
-    api.post<Task>(`/tasks/${taskId}/labels`, { labelId }),
+  // Lưu ý: API dùng item_index (số thứ tự) thay vì ID
+  updateChecklistItem: (taskId: string, index: number, text: string, checked: boolean) =>
+    api.patch(`/tasks/${taskId}/checklist-items/${index}`, { text, checked }),
 };
+
+
 
 export default api;

@@ -1,146 +1,162 @@
 import React from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Badge } from './ui/badge';
-import {
-  Calendar,
-  MessageSquare,
-  Paperclip,
-  CheckSquare,
-  AlignLeft,
-} from 'lucide-react';
 import { useDrag } from 'react-dnd';
+import { Calendar, MessageSquare, Paperclip, CheckSquare } from 'lucide-react';
+import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
+// Định nghĩa lại Type cho Task để an toàn hơn
 export interface Task {
   id: string;
   title: string;
   description?: string;
-  assignees: { name: string; avatar: string }[];
-  dueDate?: string;
-  labels: { color: string; name: string }[];
-  checklist?: { total: number; completed: number };
-  comments: number;
-  attachments: number;
+  priority?: string;
+  dueDate?: string | null;
+  // Cho phép assignees/labels là string (ID) hoặc object
+  assignees?: (string | { name: string; avatarUrl?: string })[];
+  labels?: (string | { text: string; color: string })[];
+  checklists?: any[];
+  comments?: number | any[]; // Có thể là số lượng hoặc mảng
+  attachments?: number;
 }
 
 interface TaskCardProps {
   task: Task;
-  onClick: () => void;
+  index: number;
+  onClick: (task: Task) => void;
 }
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+export function TaskCard({ task, index, onClick }: TaskCardProps) {
   const [{ isDragging }, drag] = useDrag({
     type: 'TASK',
-    item: { id: task.id },
+    item: { id: task.id, index },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
 
-  const isOverdue =
-    task.dueDate && new Date(task.dueDate) < new Date() && task.checklist
-      ? task.checklist.completed < task.checklist.total
-      : false;
+  // --- 1. XỬ LÝ AN TOÀN NGÀY THÁNG ---
+  // Kiểm tra kỹ task.dueDate có tồn tại không trước khi split
+  const displayDate = task.dueDate
+    ? new Date(task.dueDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+    : null;
+
+  // Tính toán số lượng comment (nếu backend trả về mảng hoặc số)
+  const commentCount = Array.isArray(task.comments)
+    ? task.comments.length
+    : (typeof task.comments === 'number' ? task.comments : 0);
+
+  // Tính toán checklist
+  const checklistTotal = task.checklists?.length || 0;
+  const checklistDone = task.checklists?.filter((c: any) => c.checked).length || 0;
 
   return (
     <div
       ref={drag}
-      onClick={onClick}
-      className={`bg-white rounded-lg border border-slate-200 p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group ${
-        isDragging ? 'opacity-50 rotate-3' : ''
+      onClick={() => onClick(task)}
+      className={`bg-white p-3 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition-all group relative ${
+        isDragging ? 'opacity-50' : 'opacity-100'
       }`}
     >
-      {/* Labels */}
-      {task.labels.length > 0 && (
+      {/* --- 2. XỬ LÝ AN TOÀN LABELS --- */}
+      {task.labels && task.labels.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {task.labels.map((label, index) => (
-            <Badge
-              key={index}
-              className={`${label.color} text-white border-0 h-2 px-0 w-10`}
-            >
-              <span className="sr-only">{label.name}</span>
-            </Badge>
-          ))}
+          {task.labels.map((label, idx) => {
+             // Logic an toàn: Nếu là object thì lấy color, nếu là ID string thì dùng màu mặc định
+             const color = typeof label === 'object' ? label.color : '#cbd5e1';
+             const text = typeof label === 'object' ? label.text : '';
+
+             return (
+              <div
+                key={idx}
+                className="h-2 w-8 rounded-full"
+                style={{ backgroundColor: color }}
+                title={text}
+              />
+             );
+          })}
         </div>
       )}
 
       {/* Title */}
-      <h4 className="text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
+      <h4 className="text-sm font-medium text-slate-800 mb-2 leading-tight">
         {task.title}
       </h4>
 
-      {/* Metadata Icons */}
-      <div className="flex items-center gap-3 mb-3 text-slate-500">
-        {task.description && (
-          <div className="flex items-center gap-1" title="Has description">
-            <AlignLeft className="w-4 h-4" />
-          </div>
-        )}
-        {task.checklist && (
-          <div
-            className="flex items-center gap-1"
-            title={`Checklist: ${task.checklist.completed}/${task.checklist.total}`}
-          >
-            <CheckSquare className="w-4 h-4" />
-            <span className="text-slate-600">
-              {task.checklist.completed}/{task.checklist.total}
-            </span>
-          </div>
-        )}
-        {task.comments > 0 && (
-          <div
-            className="flex items-center gap-1"
-            title={`${task.comments} comments`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-slate-600">{task.comments}</span>
-          </div>
-        )}
-        {task.attachments > 0 && (
-          <div
-            className="flex items-center gap-1"
-            title={`${task.attachments} attachments`}
-          >
-            <Paperclip className="w-4 h-4" />
-            <span className="text-slate-600">{task.attachments}</span>
-          </div>
-        )}
-      </div>
+      {/* Footer info */}
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center gap-3 text-slate-400">
+          {/* Due Date */}
+          {displayDate && (
+            <div className={`flex items-center text-xs ${new Date(task.dueDate!) < new Date() ? 'text-red-500 font-medium' : ''}`}>
+              <Calendar className="w-3.5 h-3.5 mr-1" />
+              {displayDate}
+            </div>
+          )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        {/* Assignees */}
-        <div className="flex items-center -space-x-2">
-          {task.assignees.map((assignee, index) => (
-            <Avatar
-              key={index}
-              className="w-6 h-6 border-2 border-white"
-              title={assignee.name}
-            >
-              <AvatarImage src={assignee.avatar} alt={assignee.name} />
-              <AvatarFallback className="bg-slate-200 text-slate-700">
-                {assignee.name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')}
-              </AvatarFallback>
-            </Avatar>
-          ))}
+          {/* Description Indicator */}
+          {task.description && <div title="Có mô tả"><AlignLeftIcon /></div>}
+
+          {/* Comment Count */}
+          {commentCount > 0 && (
+            <div className="flex items-center text-xs hover:text-slate-600">
+              <MessageSquare className="w-3.5 h-3.5 mr-1" />
+              {commentCount}
+            </div>
+          )}
+
+          {/* Checklist */}
+          {checklistTotal > 0 && (
+             <div className={`flex items-center text-xs ${checklistDone === checklistTotal ? 'text-green-600 bg-green-50 px-1 rounded' : ''}`}>
+               <CheckSquare className="w-3.5 h-3.5 mr-1" />
+               {checklistDone}/{checklistTotal}
+             </div>
+          )}
         </div>
 
-        {/* Due Date */}
-        {task.dueDate && (
-          <div
-            className={`flex items-center gap-1 px-2 py-1 rounded text-white ${
-              isOverdue
-                ? 'bg-red-500'
-                : 'bg-slate-400'
-            }`}
-          >
-            <Calendar className="w-3 h-3" />
-            <span>{new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+        {/* --- 3. XỬ LÝ AN TOÀN ASSIGNEES --- */}
+        {task.assignees && task.assignees.length > 0 && (
+          <div className="flex -space-x-1.5">
+            {task.assignees.map((assignee, idx) => {
+               // Logic an toàn:
+               // Nếu là Object có name -> Lấy chữ cái đầu
+               // Nếu là String (ID) -> Hiển thị 'U' mặc định
+               let initials = 'U';
+               if (typeof assignee === 'object' && assignee.name) {
+                  // ĐÂY LÀ CHỖ GÂY LỖI CŨ: .split() trên undefined
+                  initials = assignee.name.split(' ').map((n:string) => n[0]).join('').substring(0,2);
+               }
+
+               return (
+                  <div
+                    key={idx}
+                    className="w-6 h-6 rounded-full bg-blue-100 ring-1 ring-white flex items-center justify-center text-[9px] font-bold text-blue-600 uppercase"
+                    title={typeof assignee === 'object' ? assignee.name : 'Thành viên'}
+                  >
+                    {initials}
+                  </div>
+               );
+            })}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// Icon nhỏ cho description
+function AlignLeftIcon() {
+  return (
+    <svg
+      className="w-3.5 h-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="17" y1="10" x2="3" y2="10"></line>
+      <line x1="21" y1="6" x2="3" y2="6"></line>
+      <line x1="21" y1="14" x2="3" y2="14"></line>
+      <line x1="17" y1="18" x2="3" y2="18"></line>
+    </svg>
   );
 }

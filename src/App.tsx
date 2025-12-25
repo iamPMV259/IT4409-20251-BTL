@@ -9,7 +9,7 @@ import { ProjectView } from './components/project-view';
 import { MyWorkView } from './components/my-work-view';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './context/auth-context'; // Import mới
-
+import { SocketProvider } from './context/socket-context'; // <--- Import mới
 type AuthPage = 'login' | 'signup' | 'forgot-password';
 type AppView = 'dashboard' | 'board' | 'my-work' | 'settings';
 
@@ -62,8 +62,10 @@ function MainApp() {
 export default function App() {
   return (
     <AuthProvider>
+      <SocketProvider>
       <MainApp />
       <Toaster />
+      </SocketProvider>
     </AuthProvider>
   );
 }
