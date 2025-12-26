@@ -19,12 +19,14 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
+import { GlobalSearch } from './global-search';
 
 interface MainLayoutProps {
   children: React.ReactNode;
   currentView: string;
   onNavigate: (view: string) => void;
   onLogout: () => void;
+  onOpenProject?: (projectId: string, projectName: string) => void;
 }
 
 export function MainLayout({
@@ -32,8 +34,24 @@ export function MainLayout({
   currentView,
   onNavigate,
   onLogout,
+  onOpenProject,
 }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleNavigateToProject = (projectId: string, projectName: string) => {
+    if (onOpenProject) {
+      onOpenProject(projectId, projectName);
+    }
+  };
+
+  const handleNavigateToTask = (taskId: string, projectId: string) => {
+    // Navigate to project board view, then open task modal
+    // This will be handled by parent component
+    if (onOpenProject) {
+      // For now, just open the project - task modal will need URL parameter
+      onOpenProject(projectId, 'Project');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -166,14 +184,10 @@ export function MainLayout({
           </button>
 
           <div className="flex-1 max-w-2xl mx-auto px-4 lg:px-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search tasks, projects..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
+            <GlobalSearch 
+              onNavigateToProject={handleNavigateToProject}
+              onNavigateToTask={handleNavigateToTask}
+            />
           </div>
 
           <div className="flex items-center gap-2">

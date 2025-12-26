@@ -279,9 +279,14 @@ export const projectApi = {
   // THÊM: API lấy toàn bộ bảng (Project + Columns + Tasks)
   getBoard: (projectId: string) =>
     api.get<{ success: boolean; data: BoardData }>(`/projects/${projectId}/board`),
+    
   // GET /api/v1/projects/{id}
   getDetail: (projectId: string) =>
     api.get<{ success: boolean; data: ProjectDetailData }>(`/projects/${projectId}`),
+  
+  // GET /api/v1/projects/{id}/dashboard
+  getDashboard: (projectId: string) =>
+    api.get<{ success: boolean; data: any }>(`/projects/${projectId}/dashboard`),
     
   // THÊM: Mời thành viên vào dự án
   addMember: (projectId: string, email: string) =>
@@ -347,15 +352,23 @@ export const taskApi = {
   delete: (taskId: string) => api.delete(`/tasks/${taskId}`),
   
   // PATCH /api/v1/tasks/{id}/move
-  move: (taskId: string, data: { targetColumnId: string; position: number }) =>
-    api.patch<TaskResponse>(`/tasks/${taskId}/move`, data),
+  move: (taskId: string, targetColumnId: string, position?: number) =>
+    api.patch<TaskResponse>(`/tasks/${taskId}/move`, { 
+      targetColumnId, 
+      position 
+    }),
 
   // THÊM: Gửi bình luận
   addComment: (taskId: string, content: string) =>
     api.post<Comment>(`/tasks/${taskId}/comments`, { content }),
+    
   // Thêm Label vào Task
   addLabel: (taskId: string, labelId: string) =>
     api.post(`/tasks/${taskId}/labels`, { labelId }),
+    
+  // Xóa Label khỏi Task
+  removeLabel: (taskId: string, labelId: string) =>
+    api.delete(`/tasks/${taskId}/labels/${labelId}`),
     
   // Xóa Label khỏi Task (Dùng PATCH update list ID nếu không có API Delete riêng)
   // Workaround: Gửi PATCH update toàn bộ list labels
@@ -369,15 +382,66 @@ export const taskApi = {
   // Xóa người khỏi Task
   removeAssignee: (taskId: string, userId: string) =>
     api.delete(`/tasks/${taskId}/assignees/${userId}`),
+    
   // --- MỚI: CHECKLIST API ---
-  addChecklistItem: (taskId: string, text: string) =>
-    api.post(`/tasks/${taskId}/checklist-items`, { text, checked: false }),
+  addChecklistItem: (taskId: string, text: string, checked?: boolean) =>
+    api.post(`/tasks/${taskId}/checklist-items`, { text, checked: checked ?? false }),
 
   // Lưu ý: API dùng item_index (số thứ tự) thay vì ID
-  updateChecklistItem: (taskId: string, index: number, text: string, checked: boolean) =>
-    api.patch(`/tasks/${taskId}/checklist-items/${index}`, { text, checked }),
+  updateChecklistItem: (taskId: string, index: number, data: { text?: string; checked?: boolean }) =>
+    api.patch(`/tasks/${taskId}/checklist-items/${index}`, data),
+
+  // GET /api/v1/me/tasks - Lấy tất cả tasks của user hiện tại
+  getMyTasks: (params?: {
+    project_id?: string;
+    label_id?: string;
+    no_due_date?: boolean;
+    overdue?: boolean;
+    this_week?: boolean;
+  }) => api.get<TaskResponse[]>('/me/tasks', { params }),
 };
 
+// --- SEARCH API ---
+export interface ProjectSearchResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
+  deadline: string | null;
+  workspaceId: string;
+}
 
+export interface TaskSearchResponse {
+  id: string;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  dueDate: string | null;
+  projectId: string;
+  projectName: string;
+  columnId: string;
+  columnName: string;
+  labels: Array<{
+    labelId: string;
+    text: string;
+  }>;
+}
+
+export const searchApi = {
+  // GET /api/v1/search/projects/search?query={string}
+  searchProjects: (query: string) =>
+    api.get<ProjectSearchResponse[]>('/search/projects/search', { 
+      params: { query } 
+    }),
+
+  // GET /api/v1/search/tasks/search?query={string}
+  searchTasks: (query: string) =>
+    api.get<TaskSearchResponse[]>('/search/tasks/search', { 
+      params: { query } 
+    }),
+};
 
 export default api;

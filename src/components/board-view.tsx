@@ -20,6 +20,8 @@ import { LabelManagementDialog } from "./label-management-dialog"; // Đừng qu
 import { projectApi, taskApi, columnApi } from "../lib/api";
 import { toast } from "sonner";
 import { useSocket } from "../context/socket-context";
+import { useProjectBoard } from "../hooks/useProjectBoard";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -53,13 +55,14 @@ export function BoardView({
   projectDesc: initialDescription,
   onBack,
 }: BoardViewProps) {
+  // Use React Query hook
+  const { board, isLoading, moveTask, isMovingTask } = useProjectBoard(projectId);
+  const queryClient = useQueryClient();
+
+  // Local state từ board data
   const [columns, setColumns] = useState<UIColumn[]>([]);
   const [projectTitle, setProjectTitle] = useState(initialTitle);
-
-  // --- SỬA LỖI 1: Khởi tạo state từ props ---
   const [projectDesc, setProjectDesc] = useState(initialDescription || "");
-
-  const [isLoading, setIsLoading] = useState(true);
 
   // UI States
   const [isAddingColumn, setIsAddingColumn] = useState(false);
@@ -209,63 +212,52 @@ export function BoardView({
     });
   };
 
-  // --- API CALL: FETCH BOARD & DETAILS ---
+  // Sync board data từ React Query vào local state
   useEffect(() => {
-    const fetchBoardData = async () => {
-      setIsLoading(true);
+    if (board) {
+      setProjectTitle(board.project.name);
+
+      const formattedColumns: UIColumn[] = board.columns.map((col) => ({
+        id: col.id,
+        title: col.title,
+        tasks: (col.tasks || []).map((t: any) => ({
+          id: t.id || t._id || t.taskId,
+          columnId: col.id,
+          title: t.title,
+          description: t.description || "",
+          priority: "medium",
+          dueDate: t.dueDate,
+          assignees: t.assignees || [],
+          labels: t.labels || [],
+          checklists: t.checklists || [],
+          comments: t.comments || [],
+          attachments: 0,
+        })),
+      }));
+
+      const order = board.project.column_order || [];
+      if (order.length > 0) {
+        formattedColumns.sort(
+          (a, b) => order.indexOf(a.id) - order.indexOf(b.id)
+        );
+      }
+      setColumns(formattedColumns);
+    }
+  }, [board]);
+
+  // Fetch description riêng (optional - nếu cần)
+  useEffect(() => {
+    const fetchDescription = async () => {
       try {
-        // --- SỬA LỖI 2: Gọi song song Get Board và Get Detail ---
-        // Get Detail để lấy Description chính xác (vì API Board có thể thiếu)
-        const [boardRes, detailRes] = await Promise.all([
-          projectApi.getBoard(projectId),
-          projectApi.getDetail(projectId).catch(() => ({ data: null })), // Catch lỗi nếu không phải owner
-        ]);
-
-        if (boardRes.data.success) {
-          const boardData = boardRes.data.data;
-          const detailData = detailRes.data?.data; // Dữ liệu chi tiết dự án
-
-          setProjectTitle(boardData.project.name);
-
-          // Ưu tiên lấy description từ API Detail, nếu không có thì lấy từ Board, cuối cùng là rỗng
-          setProjectDesc(
-            detailData?.description || boardData.project.description || ""
-          );
-
-          const formattedColumns: UIColumn[] = boardData.columns.map((col) => ({
-            id: col.id,
-            title: col.title,
-            tasks: (col.tasks || []).map((t) => ({
-              id: t.id || (t as any)._id || (t as any).taskId,
-              columnId: col.id, // Quan trọng cho logic xóa
-              title: t.title,
-              description: t.description || "",
-              priority: "medium",
-              dueDate: t.dueDate,
-              assignees: t.assignees || [],
-              labels: t.labels || [],
-              checklists: t.checklists || [],
-              comments: t.comments || [],
-              attachments: 0,
-            })),
-          }));
-
-          const order = boardData.project.column_order || [];
-          if (order.length > 0) {
-            formattedColumns.sort(
-              (a, b) => order.indexOf(a.id) - order.indexOf(b.id)
-            );
-          }
-          setColumns(formattedColumns);
+        const { data } = await projectApi.getDetail(projectId);
+        if (data.data?.description !== undefined) {
+          setProjectDesc(data.data.description);
         }
-      } catch (error) {
-        console.error("Fetch board error:", error);
-        toast.error("Không thể tải dữ liệu dự án");
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        // Không có quyền hoặc lỗi - bỏ qua
       }
     };
-    if (projectId) fetchBoardData();
+    if (projectId) fetchDescription();
   }, [projectId]);
 
   // --- ACTIONS ---
@@ -321,7 +313,7 @@ export function BoardView({
     }
   };
 
-  // Drag Drop (Giữ nguyên logic cũ của bạn - đã ổn)
+  // Optimized Drag Drop với React Query
   const handleMoveTask = async (
     taskId: string,
     targetColumnId: string,
@@ -334,14 +326,13 @@ export function BoardView({
     if (!sourceColumn || !destColumn) return;
     if (sourceColumn.id === destColumn.id && newIndex === undefined) return;
 
+    // Optimistic update local state ngay lập tức
     const newColumns = [...columns];
     const sInd = newColumns.findIndex((c) => c.id === sourceColumn.id);
     const dInd = newColumns.findIndex((c) => c.id === destColumn.id);
 
     const taskIndex = newColumns[sInd].tasks.findIndex((t) => t.id === taskId);
     const [movedTask] = newColumns[sInd].tasks.splice(taskIndex, 1);
-
-    // Update columnId for local state immediately
     movedTask.columnId = targetColumnId;
 
     const destIndex =
@@ -351,7 +342,17 @@ export function BoardView({
     setColumns(newColumns);
 
     try {
-      await taskApi.move(taskId, { targetColumnId, position: destIndex });
+      // Sử dụng React Query mutation
+      moveTask(
+        { taskId, targetColumnId, position: destIndex },
+        {
+          onError: () => {
+            toast.error("Lỗi lưu vị trí");
+            // Rollback bằng cách refetch
+            queryClient.invalidateQueries({ queryKey: ['project-board', projectId] });
+          },
+        }
+      );
     } catch (error) {
       toast.error("Lỗi lưu vị trí");
     }
@@ -367,7 +368,7 @@ export function BoardView({
       setInviteEmail("");
       setIsInviteOpen(false);
     } catch (error) {
-      toast.error("Lỗi mời thành viên");
+      toast.error("Email không hợp lệ hoặc đã mời trước đó");
     } finally {
       setIsInviting(false);
     }

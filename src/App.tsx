@@ -1,5 +1,7 @@
 // src/App.tsx
 import React, { useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { LoginPage } from './components/login-page';
 import { SignUpPage } from './components/signup-page';
 import { ForgotPasswordPage } from './components/forgot-password-page';
@@ -8,8 +10,9 @@ import { DashboardView } from './components/dashboard-view';
 import { ProjectView } from './components/project-view';
 import { MyWorkView } from './components/my-work-view';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider, useAuth } from './context/auth-context'; // Import mới
-import { SocketProvider } from './context/socket-context'; // <--- Import mới
+import { AuthProvider, useAuth } from './context/auth-context';
+import { SocketProvider } from './context/socket-context';
+import { queryClient } from './lib/query-client';
 type AuthPage = 'login' | 'signup' | 'forgot-password';
 type AppView = 'dashboard' | 'board' | 'my-work' | 'settings';
 
@@ -48,9 +51,14 @@ function MainApp() {
   }
 
   return (
-    <MainLayout currentView={currentView} onNavigate={handleNavigate} onLogout={logout}>
+    <MainLayout 
+      currentView={currentView} 
+      onNavigate={handleNavigate} 
+      onLogout={logout}
+      onOpenProject={handleOpenProject}
+    >
       {currentView === 'dashboard' && <DashboardView onOpenProject={handleOpenProject} />}
-      {currentView === 'my-work' && <MyWorkView />}
+      {currentView === 'my-work' && <MyWorkView onNavigateToProject={handleOpenProject} />}
       {currentView === 'board' && currentProjectId && (
         <ProjectView projectId={currentProjectId} projectTitle={currentProjectTitle} onBack={handleBackToDashboard} />
       )}
@@ -61,11 +69,14 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SocketProvider>
-      <MainApp />
-      <Toaster />
-      </SocketProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <SocketProvider>
+          <MainApp />
+          <Toaster />
+        </SocketProvider>
+      </AuthProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }

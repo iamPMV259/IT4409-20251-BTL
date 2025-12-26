@@ -35,9 +35,41 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
   });
 
   // --- 1. XỬ LÝ AN TOÀN NGÀY THÁNG ---
-  // Kiểm tra kỹ task.dueDate có tồn tại không trước khi split
+  // Tính khoảng cách với ngày hiện tại theo timestamp (giây)
+  const getDaysUntilDue = (): number | null => {
+    if (!task.dueDate) return null;
+    
+    // Lấy timestamp hiện tại (giây)
+    const nowTimestamp = Date.now();
+    const dueTimestamp = new Date(task.dueDate).getTime();
+    
+    // Tính chênh lệch theo giây, sau đó convert sang ngày
+    const diffInMilliseconds = dueTimestamp - nowTimestamp;
+    const diffInDays = diffInMilliseconds / (1000 * 60 * 60 * 24);
+    
+    // Làm tròn để có số ngày chính xác
+    return Math.floor(diffInDays);
+  };
+  
+  const daysUntilDue = getDaysUntilDue();
+  
+  // Xác định màu dựa trên khoảng cách
+  const getDateColor = (): string => {
+    if (daysUntilDue === null) return 'text-slate-500';
+    
+    // Quá hạn (dueDate đã qua)
+    if (daysUntilDue < 0) return 'text-gray-700 font-semibold'; // Xám đậm
+    
+    // Gần đến hạn (0-3 ngày)
+    if (daysUntilDue <= 3) return 'text-red-600 font-semibold'; // Đỏ đậm
+    
+    // Còn lâu (> 3 ngày)
+    return 'text-blue-600 font-medium'; // Xanh nước biển đậm
+  };
+  
+  // Kiểm tra kỹ task.dueDate có tồn tại không trước khi format
   const displayDate = task.dueDate
-    ? new Date(task.dueDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+    ? new Date(task.dueDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : null;
 
   // Tính toán số lượng comment (nếu backend trả về mảng hoặc số)
@@ -87,7 +119,7 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
         <div className="flex items-center gap-3 text-slate-400">
           {/* Due Date */}
           {displayDate && (
-            <div className={`flex items-center text-xs ${new Date(task.dueDate!) < new Date() ? 'text-red-500 font-medium' : ''}`}>
+            <div className={`flex items-center text-xs ${getDateColor()}`}>
               <Calendar className="w-3.5 h-3.5 mr-1" />
               {displayDate}
             </div>

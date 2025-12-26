@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { TrendingUp, AlertCircle, Clock, Activity } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { TrendingUp, AlertCircle, Clock, Activity, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import {
@@ -17,6 +17,9 @@ import {
 } from 'recharts';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
+import { useProjectDashboard } from '../hooks/useProjectDashboard';
+import { useSocket } from '../context/socket-context';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface DashboardStatsViewProps {
   projectId: string;
@@ -25,116 +28,6 @@ interface DashboardStatsViewProps {
   onFilterBoard?: (status: string) => void;
 }
 
-// Mock data for charts and widgets
-const tasksByStatusData = [
-  { name: 'To Do', value: 12, color: '#94a3b8' },
-  { name: 'In Progress', value: 8, color: '#3b82f6' },
-  { name: 'Review', value: 5, color: '#f59e0b' },
-  { name: 'Done', value: 24, color: '#10b981' },
-];
-
-const teamWorkloadData = [
-  { name: 'John Doe', tasks: 8 },
-  { name: 'Jane Smith', tasks: 12 },
-  { name: 'Bob Wilson', tasks: 6 },
-  { name: 'Alice Johnson', tasks: 9 },
-];
-
-const overdueTasks = [
-  {
-    id: '1',
-    title: 'Fix critical bug in payment flow',
-    dueDate: '2025-10-20',
-    assignee: 'John Doe',
-    labels: [{ color: 'bg-red-500', name: 'Critical' }],
-  },
-  {
-    id: '2',
-    title: 'Update security dependencies',
-    dueDate: '2025-10-21',
-    assignee: 'Bob Wilson',
-    labels: [{ color: 'bg-orange-500', name: 'Urgent' }],
-  },
-  {
-    id: '3',
-    title: 'Review pull request #234',
-    dueDate: '2025-10-22',
-    assignee: 'Jane Smith',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-  },
-];
-
-const upcomingDeadlines = [
-  {
-    id: '4',
-    title: 'Complete homepage redesign',
-    dueDate: '2025-10-25',
-    assignee: 'John Doe',
-    labels: [{ color: 'bg-purple-500', name: 'Design' }],
-  },
-  {
-    id: '5',
-    title: 'Implement user authentication',
-    dueDate: '2025-10-27',
-    assignee: 'Alice Johnson',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-  },
-  {
-    id: '6',
-    title: 'Deploy to staging environment',
-    dueDate: '2025-10-28',
-    assignee: 'Bob Wilson',
-    labels: [{ color: 'bg-green-500', name: 'DevOps' }],
-  },
-  {
-    id: '7',
-    title: 'Client presentation preparation',
-    dueDate: '2025-10-29',
-    assignee: 'Jane Smith',
-    labels: [{ color: 'bg-yellow-500', name: 'Meeting' }],
-  },
-];
-
-const recentActivity = [
-  {
-    id: '1',
-    user: 'Jane Smith',
-    action: 'moved',
-    task: 'Implement user authentication',
-    from: 'To Do',
-    to: 'In Progress',
-    timestamp: '2 hours ago',
-  },
-  {
-    id: '2',
-    user: 'John Doe',
-    action: 'completed',
-    task: 'Design homepage wireframes',
-    timestamp: '3 hours ago',
-  },
-  {
-    id: '3',
-    user: 'Bob Wilson',
-    action: 'commented on',
-    task: 'Fix critical bug',
-    timestamp: '5 hours ago',
-  },
-  {
-    id: '4',
-    user: 'Alice Johnson',
-    action: 'added',
-    task: 'New API endpoint documentation',
-    timestamp: '6 hours ago',
-  },
-  {
-    id: '5',
-    user: 'John Doe',
-    action: 'updated',
-    task: 'Review design system',
-    timestamp: '1 day ago',
-  },
-];
-
 export function DashboardStatsView({
   projectId,
   projectTitle,
@@ -142,18 +35,107 @@ export function DashboardStatsView({
   onFilterBoard,
 }: DashboardStatsViewProps) {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Fetch dashboard data from API
+  const { data: dashboardData, isLoading, error } = useProjectDashboard(projectId);
+
+  // Socket connection for real-time updates
+  const { connectToProject, disconnect, lastJsonMessage } = useSocket();
+
+  // Connect to socket when component mounts
+  useEffect(() => {
+    if (projectId) {
+      connectToProject(projectId);
+      console.log('📊 Dashboard connected to socket for project:', projectId);
+    }
+
+    return () => {
+      disconnect();
+      console.log('📊 Dashboard disconnected from socket');
+    };
+  }, [projectId, connectToProject, disconnect]);
+
+  // Listen for socket events and invalidate dashboard query
+  useEffect(() => {
+    if (!lastJsonMessage) return;
+
+    // Debug: Log all socket messages
+    console.log('📊 Dashboard received socket message:', lastJsonMessage);
+
+    // Backend sends format: { event: "server:task_created", data: {...} }
+    const event = lastJsonMessage.event || lastJsonMessage.type;
+    
+    // Events that should trigger dashboard refresh
+    const dashboardEvents = [
+      'server:task_created',
+      'server:task_updated', 
+      'server:task_deleted',
+      'server:task_moved',
+      'server:assignee_added',
+      'server:assignee_removed',
+    ];
+
+    if (dashboardEvents.includes(event)) {
+      console.log('📊 Dashboard event matched:', event, '- Refreshing stats...');
+      // Invalidate dashboard query to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['project-dashboard', projectId] });
+    } else if (event) {
+      console.log('📊 Dashboard event not matched:', event);
+    }
+  }, [lastJsonMessage, projectId, queryClient]);
+
+  // Transform API data to chart format
+  const tasksByStatusData = useMemo(() => {
+    if (!dashboardData) return [];
+    return [
+      { name: 'To Do', value: dashboardData.to_do_tasks, color: '#94a3b8' },
+      { name: 'In Progress', value: dashboardData.in_progress_tasks, color: '#3b82f6' },
+      { name: 'Review', value: dashboardData.review_tasks, color: '#f59e0b' },
+      { name: 'Done', value: dashboardData.done_tasks, color: '#10b981' },
+    ];
+  }, [dashboardData]);
+
+  const teamWorkloadData = useMemo(() => {
+    if (!dashboardData) return [];
+    return dashboardData.team_workload_list.map(member => ({
+      name: member.userName,
+      tasks: member.taskCount,
+    }));
+  }, [dashboardData]);
 
   const handleStatusClick = (status: string) => {
     setSelectedStatus(status);
     if (onFilterBoard) {
       onFilterBoard(status);
     }
-    // In a real implementation, this would navigate to board view with filter
     console.log('Filter board by status:', status);
   };
 
-  const totalTasks = tasksByStatusData.reduce((sum, item) => sum + item.value, 0);
-  const completionRate = Math.round((tasksByStatusData.find(d => d.name === 'Done')?.value || 0) / totalTasks * 100);
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error || !dashboardData) {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-slate-600">Không thể tải dữ liệu dashboard</p>
+          <Button onClick={onBack} className="mt-4">Quay lại</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const totalTasks = dashboardData.totalTasks;
+  const completionRate = Math.round(dashboardData.completion_rate);
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -184,7 +166,7 @@ export function DashboardStatsView({
             </CardHeader>
             <CardContent>
               <div className="text-slate-900">
-                {tasksByStatusData.find(d => d.name === 'In Progress')?.value || 0}
+                {dashboardData.in_progress_tasks}
               </div>
               <p className="text-slate-500 mt-1">Active tasks</p>
             </CardContent>
@@ -207,7 +189,7 @@ export function DashboardStatsView({
               <AlertCircle className="w-4 h-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-slate-900">{overdueTasks.length}</div>
+              <div className="text-slate-900">{dashboardData.overdue_tasks}</div>
               <p className="text-slate-500 mt-1">Need attention</p>
             </CardContent>
           </Card>
@@ -292,26 +274,30 @@ export function DashboardStatsView({
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {overdueTasks.length === 0 ? (
+                {dashboardData.overdue_task_lists.length === 0 ? (
                   <p className="text-slate-500 text-center py-8">No overdue tasks</p>
                 ) : (
-                  overdueTasks.map(task => (
+                  dashboardData.overdue_task_lists.map(task => (
                     <div
-                      key={task.id}
+                      key={task.taskId}
                       className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
                     >
                       <AlertCircle className="w-4 h-4 text-red-500 mt-1 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-slate-900">{task.title}</p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className="text-red-600">
-                            Due: {new Date(task.dueDate).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </span>
-                          <span className="text-slate-400">•</span>
-                          <span className="text-slate-600">{task.assignee}</span>
+                        <p className="text-slate-900 font-medium">{task.taskTitle}</p>
+                        {task.taskDescription && (
+                          <p className="text-slate-600 text-sm mt-1 line-clamp-2">{task.taskDescription}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          {task.dueDate && (
+                            <span className="text-xs text-red-600 font-medium">
+                              Due: {new Date(task.dueDate).toLocaleDateString('vi-VN', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -332,77 +318,33 @@ export function DashboardStatsView({
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {upcomingDeadlines.map(task => (
-                  <div
-                    key={task.id}
-                    className="flex items-start justify-between gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-slate-900">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {task.labels.map((label, idx) => (
-                          <Badge
-                            key={idx}
-                            className={`${label.color} text-white border-0`}
-                          >
-                            {label.name}
-                          </Badge>
-                        ))}
-                        <span className="text-slate-600">{task.assignee}</span>
+                {dashboardData.upcoming_deadlines_7d.length === 0 ? (
+                  <p className="text-slate-500 text-center py-8">No upcoming deadlines</p>
+                ) : (
+                  dashboardData.upcoming_deadlines_7d.map(task => (
+                    <div
+                      key={task.taskId}
+                      className="flex items-start justify-between gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-slate-900 font-medium">{task.taskTitle}</p>
+                        {task.taskDescription && (
+                          <p className="text-slate-600 text-sm mt-1 line-clamp-2">{task.taskDescription}</p>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {task.dueDate && (
+                          <span className="text-xs text-orange-600 font-medium">
+                            {new Date(task.dueDate).toLocaleDateString('vi-VN', {
+                              day: '2-digit',
+                              month: '2-digit',
+                            })}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className="text-slate-600">
-                        {new Date(task.dueDate).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-slate-900 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-blue-500" />
-                Recent Activity
-              </CardTitle>
-              <p className="text-slate-600">Latest updates and changes to tasks</p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map(activity => (
-                  <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0">
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src="" alt={activity.user} />
-                      <AvatarFallback className="bg-blue-600 text-white">
-                        {activity.user.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="text-slate-900">
-                        <span>{activity.user}</span>{' '}
-                        <span className="text-slate-600">{activity.action}</span>{' '}
-                        <span>{activity.task}</span>
-                        {activity.from && activity.to && (
-                          <>
-                            {' '}
-                            <span className="text-slate-600">from</span>{' '}
-                            <Badge variant="outline">{activity.from}</Badge>{' '}
-                            <span className="text-slate-600">to</span>{' '}
-                            <Badge variant="outline">{activity.to}</Badge>
-                          </>
-                        )}
-                      </p>
-                      <p className="text-slate-500 mt-1">{activity.timestamp}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

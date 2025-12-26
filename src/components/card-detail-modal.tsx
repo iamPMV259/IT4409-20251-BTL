@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X, AlignLeft, CheckSquare, Clock, Trash2, Save, Loader2,
   Tag, User, Plus, Send, MessageSquare, CheckCircle2
@@ -11,9 +11,11 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { 
-  taskApi, projectApi, 
-  TaskResponse, Comment, Label 
+  projectApi,
+  taskApi,
+  Comment, Label 
 } from "../lib/api";
+import { useTaskDetail } from "../hooks/useTaskDetail";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from 'date-fns/locale';
@@ -34,212 +36,182 @@ export function CardDetailModal({
   onDelete,
 }: CardDetailModalProps) {
   
-  // --- STATE ---
-  const [fullTaskData, setFullTaskData] = useState<TaskResponse | null>(null);
+  // Use React Query hook
+  const {
+    task: fullTaskData,
+    isLoading,
+    updateTask,
+    isUpdating,
+    addComment,
+    isAddingComment,
+    addChecklistItem,
+    updateChecklistItem,
+    addAssignee,
+    removeAssignee,
+    addLabel,
+    deleteTask,
+    isDeletingTask,
+  } = useTaskDetail(task?.id || task?._id || null);
   
-  // Form Data
+  // Local edit states
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   
-  // Lists Data
-  const [checklist, setChecklist] = useState<any[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
+  // Temporary states for assignees and labels (chỉ cập nhật khi ấn Lưu)
+  const [tempAssignees, setTempAssignees] = useState<string[]>([]);
+  const [tempLabels, setTempLabels] = useState<string[]>([]);
   
-  // Context Data (để map ID -> Name/Color)
+  // Context Data
   const [projectMembers, setProjectMembers] = useState<any[]>([]);
   const [projectLabels, setProjectLabels] = useState<Label[]>([]);
   
   // UI States
   const [newComment, setNewComment] = useState("");
   const [newChecklistText, setNewChecklistText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSendingComment, setIsSendingComment] = useState(false);
   
   // Dropdowns
   const [showMemberSelect, setShowMemberSelect] = useState(false);
   const [showLabelSelect, setShowLabelSelect] = useState(false);
 
-  // --- FETCH DATA ---
+  // Sync fullTaskData to local form
   useEffect(() => {
-    if (isOpen && task && task.id) {
-      const fetchData = async () => {
-        setIsLoading(true);
-        try {
-          // 1. Gọi API lấy chi tiết Task (Bây giờ đã có đủ comments!)
-          const { data: taskData } = await taskApi.getDetail(task.id);
-          
-          setFullTaskData(taskData);
-          setTitle(taskData.title);
-          setDescription(taskData.description || "");
-          setDueDate(taskData.dueDate ? taskData.dueDate.split('T')[0] : "");
-          setChecklist(taskData.checklists || []);
-          setComments(taskData.comments || []); // Load comment trực tiếp từ API
-
-          // 2. Lấy thông tin Project để map hiển thị (Labels & Members)
-          if (taskData.projectId) {
-             // Load Labels
-             try {
-                const labelsRes = await projectApi.getLabels(taskData.projectId);
-                setProjectLabels(labelsRes.data);
-             } catch (e) { console.warn("Lỗi tải labels"); }
-
-             // Load Members (Cẩn thận lỗi 403 nếu là member thường)
-             try {
-               const projectRes = await projectApi.getDetail(taskData.projectId);
-               setProjectMembers(projectRes.data.data.members || []);
-             } catch (e) { console.warn("Lỗi tải members (có thể do quyền hạn)"); }
-          }
-
-        } catch (error) {
-          console.error("Lỗi tải task:", error);
-          toast.error("Không thể tải chi tiết công việc");
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchData();
+    if (fullTaskData) {
+      setTitle(fullTaskData.title);
+      setDescription(fullTaskData.description || "");
+      setDueDate(fullTaskData.dueDate ? fullTaskData.dueDate.split('T')[0] : "");
+      setTempAssignees(fullTaskData.assignees || []);
+      setTempLabels(fullTaskData.labels || []);
     }
-  }, [isOpen, task]);
+  }, [fullTaskData]);
 
-  // --- ACTIONS ---
+  // Load project context data (labels & members)
+  useEffect(() => {
+    if (!fullTaskData?.projectId) return;
+    
+    const fetchProjectContext = async () => {
+      try {
+        const [labelsRes, projectRes] = await Promise.all([
+          projectApi.getLabels(fullTaskData.projectId).catch(() => ({ data: [] })),
+          projectApi.getDetail(fullTaskData.projectId).catch(() => ({ data: { data: { members: [] } } })),
+        ]);
+        setProjectLabels(labelsRes.data || []);
+        setProjectMembers(projectRes.data?.data?.members || []);
+      } catch (e) {
+        console.warn("Error loading project context:", e);
+      }
+    };
+    
+    fetchProjectContext();
+  }, [fullTaskData?.projectId]);
+
+  // --- HANDLERS với React Query ---
 
   const handleSave = async () => {
     if (!fullTaskData) return;
-    setIsSaving(true);
-    try {
-      const { data } = await taskApi.update(fullTaskData.id, {
-        title, description, dueDate: dueDate || undefined
-      });
-      toast.success("Đã lưu");
-      onUpdate({ ...task, title: data.title, description: data.description, dueDate: data.dueDate });
-      onClose();
-    } catch { toast.error("Lỗi lưu"); } 
-    finally { setIsSaving(false); }
-  };
-
-  const handleSendComment = async () => {
-    if (!newComment.trim() || !fullTaskData) return;
-    setIsSendingComment(true);
-    try {
-      // Gọi API post comment
-      const { data: newCommentRes } = await taskApi.addComment(fullTaskData.id, newComment);
-      
-      // Backend trả về comment object chuẩn, ta thêm vào list
-      // Lưu ý: Nếu backend API addComment chưa trả về đúng format Comment, ta có thể fake tạm
-      const commentToAdd: Comment = {
-          commentId: newCommentRes.id || Math.random().toString(),
-          content: newComment,
-          createdAt: new Date().toISOString(),
-          userId: 'me',
-          username: 'Tôi', // Hoặc lấy từ user context
-          ...newCommentRes // Ghi đè nếu API trả về chuẩn
-      };
-      
-      setComments([...comments, commentToAdd]);
-      setNewComment("");
-    } catch { toast.error("Lỗi gửi bình luận"); }
-    finally { setIsSendingComment(false); }
-  };
-
-  // Checklist Handlers
-  const handleAddChecklist = async () => {
-      if (!newChecklistText.trim() || !fullTaskData) return;
-      try {
-          await taskApi.addChecklistItem(fullTaskData.id, newChecklistText);
-          setChecklist([...checklist, { text: newChecklistText, checked: false }]);
-          setNewChecklistText("");
-      } catch { toast.error("Lỗi thêm checklist"); }
-  };
-
-  const handleToggleChecklist = async (index: number, item: any) => {
-      if (!fullTaskData) return;
-      const newStatus = !item.checked;
-      const newChecklist = [...checklist];
-      newChecklist[index].checked = newStatus;
-      setChecklist(newChecklist); // Optimistic
-      try {
-          await taskApi.updateChecklistItem(fullTaskData.id, index, item.text, newStatus);
-      } catch { 
-          // Revert
-          newChecklist[index].checked = !newStatus;
-          setChecklist(newChecklist);
-      }
-  };
-
-  // Toggle Members/Labels
-  const handleToggleAssignee = async (userId: string) => {
-      if (!fullTaskData) return;
-      const isAssigned = fullTaskData.assignees.includes(userId);
-      const newAssignees = isAssigned 
-          ? fullTaskData.assignees.filter(id => id !== userId)
-          : [...fullTaskData.assignees, userId];
-      
-      setFullTaskData({ ...fullTaskData, assignees: newAssignees }); // Optimistic UI
-      try {
-          if (isAssigned) await taskApi.removeAssignee(fullTaskData.id, userId);
-          else await taskApi.addAssignee(fullTaskData.id, userId);
-      } catch { toast.error("Lỗi cập nhật thành viên"); }
-  };
-
-  // const handleToggleLabel = async (labelId: string) => {
-  //     if (!fullTaskData) return;
-  //     if (!fullTaskData.labels.includes(labelId)) {
-  //         setFullTaskData({ ...fullTaskData, labels: [...fullTaskData.labels, labelId] });
-  //         try { await taskApi.addLabel(fullTaskData.id, labelId); } 
-  //         catch { toast.error("Lỗi thêm nhãn"); }
-  //     }
-  // };
-const handleToggleLabel = async (labelId: string) => {
-      if (!fullTaskData) return;
-      
-      // Kiểm tra xem đã có nhãn này chưa
-      if (!fullTaskData.labels.includes(labelId)) {
-          // 1. Tạo danh sách nhãn mới
-          const newLabels = [...fullTaskData.labels, labelId];
-          
-          // 2. Cập nhật State nội bộ (Optimistic UI)
-          const updatedTask = { ...fullTaskData, labels: newLabels };
-          setFullTaskData(updatedTask);
-          
-          try {
-              // 3. Gọi API
-              await taskApi.addLabel(fullTaskData.id, labelId);
-              
-              // 4. QUAN TRỌNG: Báo cho BoardView biết để cập nhật UI bên ngoài
-              onUpdate(updatedTask);
-              
-          } catch (error) { 
-              toast.error("Lỗi thêm nhãn");
-              // Revert nếu lỗi (tùy chọn)
-          }
-      } else {
-          toast.info("Nhãn này đã được thêm rồi");
-      }
-  };
-  
-  const handleDelete = async () => {
-    // Chỉ cần có task id là xóa được, không cần fullTaskData
-    if (!task || !task.id) return; 
-    
-    if (!window.confirm("Bạn chắc chắn muốn xóa thẻ này?")) return;
     
     try {
-      await taskApi.delete(task.id);
+      // 1. Cập nhật title, description, dueDate
+      await updateTask(
+        { title, description, dueDate: dueDate || undefined },
+        { onError: () => toast.error("Lỗi lưu thông tin task") }
+      );
       
-      // Gọi callback xóa (chỉ cần truyền ID)
-      // Lưu ý: props onDelete ở đây cần sửa lại type một chút nếu typescript báo lỗi, 
-      // nhưng về mặt logic JS thì truyền thiếu tham số columnId cũng không sao vì hàm mới ở trên không dùng nó.
-      onDelete(task.id, ""); 
+      // 2. Cập nhật assignees (thêm/xóa)
+      const currentAssignees = fullTaskData.assignees || [];
+      const toAdd = tempAssignees.filter(id => !currentAssignees.includes(id));
+      const toRemove = currentAssignees.filter(id => !tempAssignees.includes(id));
       
+      for (const userId of toAdd) {
+        await addAssignee(userId, { onError: () => toast.error(`Lỗi thêm thành viên`) });
+      }
+      for (const userId of toRemove) {
+        await removeAssignee(userId, { onError: () => toast.error(`Lỗi xóa thành viên`) });
+      }
+      
+      // 3. Cập nhật labels (PATCH toàn bộ list thay vì thêm/xóa riêng lẻ vì backend không hỗ trợ DELETE)
+      const currentLabels = fullTaskData.labels || [];
+      if (JSON.stringify(currentLabels.sort()) !== JSON.stringify(tempLabels.sort())) {
+        // Chỉ cập nhật nếu có thay đổi
+        await taskApi.updateLabels(fullTaskData.id, tempLabels).catch(() => toast.error(`Lỗi cập nhật nhãn`));
+      }
+      
+      toast.success("Đã lưu tất cả thay đổi");
+      onUpdate({ ...task, title, description, dueDate });
       onClose();
     } catch (error) {
-      console.error(error);
-      toast.error("Xóa thất bại"); 
+      toast.error("Có lỗi xảy ra khi lưu");
     }
   };
 
+  const handleSendComment = () => {
+    if (!newComment.trim()) return;
+    addComment(newComment, {
+      onSuccess: () => {
+        setNewComment("");
+        toast.success("Đã thêm bình luận");
+      },
+      onError: () => {
+        toast.error("Lỗi gửi bình luận");
+      },
+    });
+  };
+
+  const handleAddChecklist = () => {
+    if (!newChecklistText.trim()) return;
+    addChecklistItem(
+      { text: newChecklistText, checked: false },
+      {
+        onSuccess: () => {
+          setNewChecklistText("");
+        },
+        onError: () => {
+          toast.error("Lỗi thêm checklist");
+        },
+      }
+    );
+  };
+
+  const handleToggleChecklist = (index: number, item: any) => {
+    updateChecklistItem(
+      { index, checked: !item.checked },
+      {
+        onError: () => {
+          toast.error("Lỗi cập nhật checklist");
+        },
+      }
+    );
+  };
+
+  const handleToggleAssignee = (userId: string) => {
+    setTempAssignees(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleToggleLabel = (labelId: string) => {
+    setTempLabels(prev => 
+      prev.includes(labelId) ? prev.filter(id => id !== labelId) : [...prev, labelId]
+    );
+  };
+
+  const handleDelete = () => {
+    if (!fullTaskData || !window.confirm("Xóa công việc này?")) return;
+    deleteTask(undefined, {
+      onSuccess: () => {
+        toast.success("Đã xóa công việc");
+        onDelete(fullTaskData.id, fullTaskData.columnId);
+        onClose();
+      },
+      onError: () => {
+        toast.error("Lỗi xóa công việc");
+      },
+    });
+  };
+
+  // Memoize computed values
+  const checklist = useMemo(() => fullTaskData?.checklists || [], [fullTaskData]);
+  const comments = useMemo(() => fullTaskData?.comments || [], [fullTaskData]);
   // Tính toán checklist progress
   const checklistTotal = checklist.length;
   const checklistDone = checklist.filter(c => c.checked).length;
@@ -249,10 +221,10 @@ const handleToggleLabel = async (labelId: string) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-white" aria-describedby="desc">
-        <DialogHeader className="sr-only">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription id="desc">Detail</DialogDescription>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-white">
+        <DialogHeader className="absolute opacity-0 pointer-events-none h-0 overflow-hidden">
+          <DialogTitle>{title || "Chi tiết công việc"}</DialogTitle>
+          <DialogDescription>Xem và chỉnh sửa thông tin chi tiết công việc</DialogDescription>
         </DialogHeader>
 
         <div className="h-24 bg-gradient-to-r from-blue-600 to-indigo-600 w-full relative">
@@ -276,22 +248,29 @@ const handleToggleLabel = async (labelId: string) => {
                 {/* Labels & Assignees Badges */}
                 <div className="flex flex-wrap gap-2 mt-2 ml-2">
                    {/* Map Labels ID -> Object */}
-                   {fullTaskData?.labels?.map((lId, idx) => {
+                   {tempLabels.map((lId, idx) => {
                       const labelObj = projectLabels.find(l => l.id === lId);
                       return (
-                        <Badge key={lId || idx} style={{backgroundColor: labelObj?.color || '#10b981'}} className="text-white hover:brightness-90 px-2 py-1">
+                        <Badge 
+                          key={lId || idx} 
+                          style={{backgroundColor: labelObj?.color || '#10b981'}} 
+                          className="text-white hover:brightness-90 px-2 py-1 cursor-pointer flex items-center gap-1"
+                          onClick={() => handleToggleLabel(lId)}
+                        >
                           {labelObj?.text || "Label"}
+                          <X className="w-3 h-3 hover:bg-white/20 rounded" />
                         </Badge>
                       );
                    })}
                    
                    {/* Map Assignees ID -> Object */}
-                   {fullTaskData?.assignees?.map((uId, idx) => {
+                   {tempAssignees.map((uId, idx) => {
                       const member = projectMembers.find(m => m.user?.id === uId || m.user_id === uId);
                       const name = member?.user?.name || member?.name || "User";
                       return (
-                         <div key={uId || idx} className="h-6 px-2 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1 text-xs font-medium">
+                         <div key={uId || idx} className="h-6 px-2 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1 text-xs font-medium cursor-pointer hover:bg-blue-100" onClick={() => handleToggleAssignee(uId)}>
                             <User className="w-3 h-3"/> {name}
+                            <X className="w-3 h-3 hover:bg-blue-200 rounded" />
                          </div>
                       );
                    })}
@@ -351,7 +330,7 @@ const handleToggleLabel = async (labelId: string) => {
                       placeholder="Viết bình luận..." className="pr-10"
                       onKeyDown={e => {if(e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); handleSendComment()}}}
                     />
-                    <Button size="icon" className="absolute bottom-2 right-2 h-6 w-6" onClick={handleSendComment} disabled={isSendingComment}>
+                    <Button size="icon" className="absolute bottom-2 right-2 h-6 w-6" onClick={handleSendComment} disabled={isAddingComment}>
                        <Send className="w-3 h-3"/>
                     </Button>
                  </div>
@@ -382,6 +361,29 @@ const handleToggleLabel = async (labelId: string) => {
 
           {/* --- RIGHT COLUMN --- */}
           <div className="w-full md:w-60 flex flex-col gap-4">
+             {/* Due Date Selector */}
+             <div>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Hạn hoàn thành</label>
+                <div className="relative">
+                  <Input 
+                    type="date" 
+                    value={dueDate} 
+                    onChange={e => setDueDate(e.target.value)}
+                    className="w-full text-sm"
+                  />
+                  {dueDate && (
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-400 hover:text-slate-600"
+                      onClick={() => setDueDate("")}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+             </div>
+             
              {/* Assignees Selector */}
              <div className="relative">
                 <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Thành viên</label>
@@ -393,7 +395,7 @@ const handleToggleLabel = async (labelId: string) => {
                      {projectMembers.map(m => {
                         const uId = m.user?.id || m.user_id; 
                         const uName = m.user?.name || m.name || uId;
-                        const isSelected = fullTaskData?.assignees?.includes(uId);
+                        const isSelected = tempAssignees.includes(uId);
                         return (
                         <div key={uId} onClick={() => handleToggleAssignee(uId)} className={`flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded text-sm ${isSelected ? 'bg-blue-50 text-blue-600' : ''}`}>
                            <div className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">{uName.charAt(0)}</div>
@@ -413,24 +415,26 @@ const handleToggleLabel = async (labelId: string) => {
                 </Button>
                 {showLabelSelect && (
                   <div className="absolute top-full left-0 w-full mt-1 bg-white border shadow-lg rounded-lg p-2 z-50 max-h-48 overflow-y-auto">
-                     {projectLabels.map(l => (
+                     {projectLabels.map(l => {
+                        const isSelected = tempLabels.includes(l.id);
+                        return (
                         <div key={l.id} onClick={() => handleToggleLabel(l.id)} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer rounded mb-1">
                            <div className="w-full h-8 rounded flex items-center px-2 text-white text-xs font-medium" style={{backgroundColor: l.color || '#ccc'}}>
                               {l.text}
-                              {fullTaskData?.labels?.includes(l.id) && <CheckSquare className="w-4 h-4 ml-auto text-white"/>}
+                              {isSelected && <CheckSquare className="w-4 h-4 ml-auto text-white"/>}
                            </div>
                         </div>
-                     ))}
+                     )})}
                   </div>
                 )}
              </div>
 
              <div className="border-t pt-4 mt-2 space-y-2">
-                <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
-                   {isSaving ? <Loader2 className="animate-spin mr-2 w-4 h-4"/> : <Save className="w-4 h-4 mr-2"/>} Lưu
+                <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700" disabled={isUpdating}>
+                   {isUpdating ? <Loader2 className="animate-spin mr-2 w-4 h-4"/> : <Save className="w-4 h-4 mr-2"/>} Lưu
                 </Button>
-                <Button onClick={handleDelete} variant="ghost" className="w-full text-red-600 hover:bg-red-50">
-                   <Trash2 className="w-4 h-4 mr-2"/> Xóa thẻ
+                <Button onClick={handleDelete} variant="ghost" className="w-full text-red-600 hover:bg-red-50" disabled={isDeletingTask}>
+                   <Trash2 className="w-4 h-4 mr-2"/> {isDeletingTask ? "Đang xóa..." : "Xóa thẻ"}
                 </Button>
              </div>
           </div>

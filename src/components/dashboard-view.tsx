@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -11,11 +11,7 @@ import {
   Hash,
 } from 'lucide-react';
 import { useAuth } from '../context/auth-context';
-import {
-  workspaceApi,
-  WorkspaceResponse,
-  JoinedProject,
-} from '../lib/api';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -42,12 +38,21 @@ interface DashboardViewProps {
 
 export function DashboardView({ onOpenProject }: DashboardViewProps) {
   const { logout, user } = useAuth();
+  
+  // Use React Query hooks
+  const {
+    workspaces,
+    isLoadingWorkspaces,
+    joinedProjects,
+    isLoadingProjects,
+    createWorkspace,
+    isCreatingWorkspace,
+    createProject,
+    isCreatingProject,
+  } = useWorkspaces();
 
-  // State
-  const [workspaces, setWorkspaces] = useState<WorkspaceResponse[]>([]);
+  // Local UI State
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('ALL');
-  const [projects, setProjects] = useState<JoinedProject[]>([]);
-  const [isLoadingInit, setIsLoadingInit] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dialog states
@@ -56,83 +61,58 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-
-  // Fetch data
-  useEffect(() => {
-    const initData = async () => {
-      setIsLoadingInit(true);
-      try {
-        const [wsRes, projRes] = await Promise.all([
-          workspaceApi.getAll(),
-          workspaceApi.getJoinedProjects(),
-        ]);
-        setWorkspaces(wsRes.data);
-        setProjects(projRes.data);
-      } catch (error) {
-        console.error(error);
-        toast.error('Không thể tải dữ liệu Dashboard');
-      } finally {
-        setIsLoadingInit(false);
-      }
-    };
-    initData();
-  }, []);
 
   // Handlers
-  const handleCreateWorkspace = async () => {
+  const handleCreateWorkspace = () => {
     if (!newWorkspaceName.trim()) return;
-    try {
-      const { data } = await workspaceApi.create(newWorkspaceName);
-      setWorkspaces([...workspaces, data]);
-      setNewWorkspaceName('');
-      setIsWorkspaceDialogOpen(false);
-      toast.success('Đã tạo Workspace');
-    } catch {
-      toast.error('Lỗi tạo Workspace');
-    }
+    createWorkspace(newWorkspaceName, {
+      onSuccess: () => {
+        setNewWorkspaceName('');
+        setIsWorkspaceDialogOpen(false);
+        toast.success('Đã tạo Workspace');
+      },
+      onError: () => {
+        toast.error('Lỗi tạo Workspace');
+      },
+    });
   };
 
-  const handleCreateProject = async () => {
+  const handleCreateProject = () => {
     if (!newProjectName.trim() || currentWorkspaceId === 'ALL') return;
-    setIsCreatingProject(true);
-    try {
-      const { data: res } = await workspaceApi.createProject(
-        currentWorkspaceId,
-        {
-          name: newProjectName,
-          description: newProjectDesc,
-        }
-      );
-      if (res.success) {
-        const newProj: JoinedProject = {
-          project_id: res.data.id,
-          project_name: res.data.name,
-          role: 'owner',
-          workspace_id: res.data.workspace_id,
-        };
-        setProjects([newProj, ...projects]);
-        setIsProjectDialogOpen(false);
-        setNewProjectName('');
-        setNewProjectDesc('');
-        toast.success('Đã tạo dự án');
+    createProject(
+      {
+        workspaceId: currentWorkspaceId,
+        name: newProjectName,
+        description: newProjectDesc,
+      },
+      {
+        onSuccess: () => {
+          setIsProjectDialogOpen(false);
+          setNewProjectName('');
+          setNewProjectDesc('');
+          toast.success('Đã tạo dự án');
+        },
+        onError: () => {
+          toast.error('Lỗi tạo dự án');
+        },
       }
-    } catch {
-      toast.error('Lỗi tạo dự án');
-    } finally {
-      setIsCreatingProject(false);
-    }
+    );
   };
 
-  // Filter
-  const workspaceProjects =
-    currentWorkspaceId === 'ALL'
-      ? projects
-      : projects.filter(p => p.workspace_id === currentWorkspaceId);
+  // Filter - Memoize để tránh re-compute không cần thiết
+  const filteredProjects = useMemo(() => {
+    const projects = joinedProjects || [];
+    const workspaceProjects =
+      currentWorkspaceId === 'ALL'
+        ? projects
+        : projects.filter((p) => p.workspace_id === currentWorkspaceId);
 
-  const filteredProjects = workspaceProjects.filter(p =>
-    p.project_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    return workspaceProjects.filter((p) =>
+      p.project_name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [joinedProjects, currentWorkspaceId, searchQuery]);
+
+  const isLoadingInit = isLoadingWorkspaces || isLoadingProjects;
 
   if (isLoadingInit) {
     return (
@@ -158,19 +138,11 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
             </span>
             , bạn đang tham gia{' '}
             <span className="font-bold text-blue-600">
-              {projects.length}
+              {(joinedProjects || []).length}
             </span>{' '}
             dự án.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={logout}
-          className="hover:text-red-600 hover:bg-red-50"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Đăng xuất
-        </Button>
       </div>
 
       {/* Controls */}
@@ -188,7 +160,7 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Tất cả Workspaces</SelectItem>
-            {workspaces.map(w => (
+            {(workspaces || []).map(w => (
               <SelectItem key={w.id} value={w.id}>
                 {w.name}
               </SelectItem>
@@ -199,16 +171,6 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
             </SelectItem>
           </SelectContent>
         </Select>
-
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder="Tìm tên dự án..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
       </div>
 
 
@@ -231,7 +193,7 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Tạo dự án mới</DialogTitle>
-              <DialogDescription>Dự án sẽ được tạo trong <strong>{workspaces.find(w => w.id === currentWorkspaceId)?.name}</strong></DialogDescription>
+              <DialogDescription>Dự án sẽ được tạo trong <strong>{(workspaces || []).find(w => w.id === currentWorkspaceId)?.name}</strong></DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
@@ -255,7 +217,7 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
         )}
         {filteredProjects.map(project => {
           const workspaceName =
-            workspaces.find(w => w.id === project.workspace_id)
+            (workspaces || []).find(w => w.id === project.workspace_id)
               ?.name || 'Shared Project';
 
           const displayName =
