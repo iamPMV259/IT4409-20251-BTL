@@ -282,8 +282,17 @@ async def move_task(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
+    if not workspace:
+        raise NotFoundError("Workspace not found")
+
+    isAdminOrOwner = (workspace.ownerId == current_user.id or project.ownerId == current_user.id)
+
+    isAssignedTask = (current_user.id in task.assignees)
+    
+    if not (isAdminOrOwner or isAssignedTask):
         raise PermissionDeniedError("You don't have access to this task")
+
+
     
     old_column_id = task.columnId
     new_column_id = move_data.targetColumnId
@@ -293,6 +302,9 @@ async def move_task(
     
     if not new_column:
         raise NotFoundError(f"Target column with ID {new_column_id} not found")
+
+    if new_column.title == "Done" and not (isAdminOrOwner):
+        raise PermissionDeniedError("Only workspace owners or project owners can move tasks to the 'Done' column")
 
     source_position = None
     

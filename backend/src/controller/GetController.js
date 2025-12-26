@@ -96,7 +96,7 @@ const createProject = async (req, res) => {
             deadline: deadline ? new Date(deadline) : undefined 
         });
         
-        const defaultColumns = ['To Do', 'In Progress', 'Done'];
+        const defaultColumns = ['To Do', 'In Progress', 'Review', 'Done'];
         const columnIds = [];
         const createdColumns = [];
         
