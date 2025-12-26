@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import {
-Plus, ArrowLeft, Loader2, UserPlus, Settings, Tag, 
-  Search, Filter, CalendarClock, User
+  Plus,
+  ArrowLeft,
+  Loader2,
+  UserPlus,
+  Settings,
+  Tag,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { BoardColumn } from "./board-column";
@@ -12,12 +16,8 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { TouchBackend } from "react-dnd-touch-backend";
 import { ProjectSettingsDialog } from "./project-settings-dialog";
-import { LabelManagementDialog } from "./label-management-dialog";
-import {
-  projectApi,
-  taskApi,
-  columnApi, // Import API Column
-} from "../lib/api";
+import { LabelManagementDialog } from "./label-management-dialog"; // Đừng quên import cái này
+import { projectApi, taskApi, columnApi } from "../lib/api";
 import { toast } from "sonner";
 import { useSocket } from "../context/socket-context";
 import {
@@ -38,7 +38,7 @@ interface UIColumn {
 interface BoardViewProps {
   projectId: string;
   projectTitle: string;
-  projectDesc?: string;
+  projectDesc?: string; // Optional vì có thể không truyền từ ngoài vào
   onBack: () => void;
 }
 
@@ -55,7 +55,10 @@ export function BoardView({
 }: BoardViewProps) {
   const [columns, setColumns] = useState<UIColumn[]>([]);
   const [projectTitle, setProjectTitle] = useState(initialTitle);
+
+  // --- SỬA LỖI 1: Khởi tạo state từ props ---
   const [projectDesc, setProjectDesc] = useState(initialDescription || "");
+
   const [isLoading, setIsLoading] = useState(true);
 
   // UI States
@@ -64,32 +67,32 @@ export function BoardView({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Invite States
+  // Dialog States
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [isInviting, setIsInviting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { connectToProject, disconnect, lastJsonMessage } = useSocket();
   const [isLabelMgrOpen, setIsLabelMgrOpen] = useState(false); // State cho Label Dialog
+
+  // Socket
+  const { connectToProject, disconnect, lastJsonMessage } = useSocket();
 
   useEffect(() => {
     if (projectId) connectToProject(projectId);
     return () => disconnect();
   }, [projectId, connectToProject, disconnect]);
 
-  // 3. XỬ LÝ SỰ KIỆN TỪ SERVER (Trái tim của Realtime)
+  // SOCKET HANDLER
   useEffect(() => {
     if (lastJsonMessage !== null) {
       const { event, data } = lastJsonMessage;
-      console.log("🔔 Socket Event Received:", event, data);
+      // console.log("🔔 Socket Event:", event, data);
 
       switch (event) {
-        // --- PHẦN 1: PROJECT ---
-        case "client:join_project_room":
-          console.log(`Đã vào phòng dự án: ${data.project_id}`);
-          break;
-
         case "server:project_updated":
+          console.log("Socket Update Project:", data); // Debug xem data có gì
+
+          // Cập nhật tên nếu có
           if (data.name) setProjectTitle(data.name);
 
           // Cập nhật mô tả (QUAN TRỌNG: Kiểm tra !== undefined để cho phép set rỗng)
@@ -100,22 +103,18 @@ export function BoardView({
           toast.info(`Thông tin dự án đã được cập nhật`);
           break;
 
+        // Cập nhật Description realtime
         case "server:project_description_updated":
           setProjectDesc(data.description);
-          toast.info(`Mô tả dự án đã được cập nhật.`);
           break;
 
-        // --- PHẦN 2: COLUMNS ---
         case "server:column_created":
-          setColumns((prev) => {
-            if (prev.some((c) => c.id === data.columnId)) return prev;
-            return [
-              ...prev,
-              { id: data.columnId, title: data.title, tasks: [] },
-            ];
-          });
+          setColumns((prev) =>
+            prev.some((c) => c.id === data.columnId)
+              ? prev
+              : [...prev, { id: data.columnId, title: data.title, tasks: [] }]
+          );
           break;
-
         case "server:column_updated":
           setColumns((prev) =>
             prev.map((col) =>
@@ -123,21 +122,19 @@ export function BoardView({
             )
           );
           break;
-
         case "server:column_deleted":
           setColumns((prev) => prev.filter((col) => col.id !== data.columnId));
           break;
 
-        // --- PHẦN 3: TASKS ---
         case "server:task_created":
+          // Socket tự động thêm task, không cần làm gì vì logic handleAddTask đã bỏ setColumns
           setColumns((prev) =>
             prev.map((col) => {
               if (col.id === data.columnId) {
-                // Check trùng để tránh duplicate
                 if (col.tasks.some((t) => t.id === data.id)) return col;
-
                 const newTask = {
                   id: data.id,
+                  columnId: data.columnId, // Đảm bảo có columnId
                   title: data.title,
                   description: data.description || "",
                   dueDate: data.dueDate,
@@ -145,8 +142,8 @@ export function BoardView({
                   labels: data.labels || [],
                   checklists: [],
                   comments: 0,
-                  attachments: 0,
                   priority: "medium",
+                  attachments: 0,
                 };
                 return { ...col, tasks: [...col.tasks, newTask] };
               }
@@ -159,13 +156,9 @@ export function BoardView({
           setColumns((prev) =>
             prev.map((col) => ({
               ...col,
-              tasks: col.tasks.map((t) => {
-                if (t.id === data.id) {
-                  // Merge thông tin mới
-                  return { ...t, ...data };
-                }
-                return t;
-              }),
+              tasks: col.tasks.map((t) =>
+                t.id === data.id ? { ...t, ...data } : t
+              ),
             }))
           );
           break;
@@ -176,89 +169,49 @@ export function BoardView({
 
         case "server:task_deleted":
           setColumns((prev) =>
-            prev.map((col) => {
-              if (col.id === data.columnId) {
-                return {
-                  ...col,
-                  tasks: col.tasks.filter((t) => t.id !== data.taskId),
-                };
-              }
-              return col;
-            })
-          );
-          break;
-
-        case "server:comment_added":
-          // Nếu đang mở Modal Task đúng task này -> Cập nhật comment (xử lý ở bước 3)
-          // Ở BoardView, ta có thể hiện thông báo nhỏ
-          toast.info(`💬 Có bình luận mới trong thẻ`);
-
-          // Cập nhật count comment trong column (nếu UI có hiển thị số comment)
-          setColumns((prev) =>
             prev.map((col) => ({
               ...col,
-              tasks: col.tasks.map((t) => {
-                if (t.id === data.taskId) {
-                  return { ...t, comments: (t.comments || 0) + 1 };
-                }
-                return t;
-              }),
+              tasks: col.tasks.filter((t) => t.id !== data.taskId),
             }))
           );
           break;
-
-        default:
-          console.log("Unhandled event:", event);
       }
     }
   }, [lastJsonMessage]);
 
-  // 4. Logic xử lý Task Move từ Server (Khá phức tạp nên tách riêng)
   const handleServerTaskMove = (data: any) => {
     const { taskId, sourceColumnId, destColumnId, newPosition } = data;
+    setColumns((prev) => {
+      const newCols = [...prev];
+      const sInd = newCols.findIndex((c) => c.id === sourceColumnId);
+      const dInd = newCols.findIndex((c) => c.id === destColumnId);
+      if (sInd === -1 || dInd === -1) return prev;
 
-    setColumns((prevColumns) => {
-      // Clone deep một chút để an toàn
-      const newCols = [...prevColumns];
+      const sCol = { ...newCols[sInd], tasks: [...newCols[sInd].tasks] };
+      const dCol = { ...newCols[dInd], tasks: [...newCols[dInd].tasks] };
 
-      const sourceColIndex = newCols.findIndex((c) => c.id === sourceColumnId);
-      const destColIndex = newCols.findIndex((c) => c.id === destColumnId);
+      const tInd = sCol.tasks.findIndex((t) => t.id === taskId);
+      if (tInd === -1) return prev;
 
-      if (sourceColIndex === -1 || destColIndex === -1) return prevColumns;
+      const [task] = sCol.tasks.splice(tInd, 1);
+      // Cập nhật columnId mới cho task
+      task.columnId = destColumnId;
 
-      const sourceCol = {
-        ...newCols[sourceColIndex],
-        tasks: [...newCols[sourceColIndex].tasks],
-      };
-      const destCol = {
-        ...newCols[destColIndex],
-        tasks: [...newCols[destColIndex].tasks],
-      };
-
-      // Tìm và xóa task ở cột nguồn
-      const taskIndex = sourceCol.tasks.findIndex((t) => t.id === taskId);
-      if (taskIndex === -1) return prevColumns; // Không tìm thấy task
-
-      const [movedTask] = sourceCol.tasks.splice(taskIndex, 1);
-
-      // Chèn task vào cột đích
-      // Nếu cột nguồn và đích trùng nhau -> Xử lý index cẩn thận (đã được splice nên index có thể thay đổi)
       if (sourceColumnId === destColumnId) {
-        sourceCol.tasks.splice(newPosition, 0, movedTask);
-        newCols[sourceColIndex] = sourceCol;
+        sCol.tasks.splice(newPosition, 0, task);
+        newCols[sInd] = sCol;
       } else {
-        destCol.tasks.splice(newPosition, 0, movedTask);
-        newCols[sourceColIndex] = sourceCol;
-        newCols[destColIndex] = destCol;
+        dCol.tasks.splice(newPosition, 0, task);
+        newCols[sInd] = sCol;
+        newCols[dInd] = dCol;
       }
-
       return newCols;
     });
   };
 
-  // API Call: Fetch Board
+  // --- API CALL: FETCH BOARD & DETAILS ---
   useEffect(() => {
-    const fetchBoard = async () => {
+    const fetchBoardData = async () => {
       setIsLoading(true);
       try {
         // --- SỬA LỖI 2: Gọi song song Get Board và Get Detail ---
@@ -306,27 +259,26 @@ export function BoardView({
           setColumns(formattedColumns);
         }
       } catch (error) {
-        toast.error("Không thể tải bảng công việc");
+        console.error("Fetch board error:", error);
+        toast.error("Không thể tải dữ liệu dự án");
       } finally {
         setIsLoading(false);
       }
     };
-    if (projectId) fetchBoard();
+    if (projectId) fetchBoardData();
   }, [projectId]);
 
-
-  // --- COLUMN ACTIONS ---
-
+  // --- ACTIONS ---
   const handleAddColumn = async () => {
     if (!newColumnTitle.trim()) return;
     try {
       const { data } = await columnApi.create(projectId, newColumnTitle);
       toast.success("Đã tạo cột mới");
-      // UI update (nếu socket chưa kịp)
+      // UI update (fallback nếu socket chậm)
       const newCol = data.data
         ? { id: data.data.id, title: data.data.title, tasks: [] }
         : null;
-      if (newCol) setColumns([...columns, newCol]);
+      if (newCol) setColumns((prev) => [...prev, newCol]);
 
       setNewColumnTitle("");
       setIsAddingColumn(false);
@@ -338,6 +290,7 @@ export function BoardView({
   const handleRenameColumn = async (columnId: string, newTitle: string) => {
     try {
       await columnApi.update(columnId, newTitle);
+      // Không cần setColumns thủ công nếu tin tưởng Socket, nhưng giữ để phản hồi nhanh
       setColumns((prev) =>
         prev.map((c) => (c.id === columnId ? { ...c, title: newTitle } : c))
       );
@@ -357,110 +310,50 @@ export function BoardView({
     }
   };
 
-  // --- TASK ACTIONS ---
+  // Task Actions
   const handleAddTask = async (columnId: string, title: string) => {
     try {
-      // 1. Chỉ gọi API để tạo task
+      // Chỉ gọi API, đợi socket server:task_created cập nhật UI để tránh duplicate
       await taskApi.create(columnId, { title });
-
-      // 2. KHÔNG setColumns ở đây nữa.
-      // Socket 'server:task_created' sẽ tự động nhận event và vẽ task lên Board.
-      // Điều này giúp tránh việc render 2 lần.
-
       toast.success("Đã tạo thẻ");
     } catch (error) {
       toast.error("Lỗi tạo thẻ");
     }
   };
 
-  // UI Handlers
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task);
-    setIsModalOpen(true);
-  };
-
-  const handleUpdateTaskInList = (updatedTask: Task) => {
-    // Cập nhật State React ngay lập tức
-    setColumns((prevColumns) =>
-      prevColumns.map((col) => ({
-        ...col,
-        tasks: col.tasks.map((t) => {
-          // Tìm thấy task cần sửa -> Trộn dữ liệu mới vào
-          if (t.id === updatedTask.id) {
-            return { ...t, ...updatedTask };
-          }
-          return t;
-        }),
-      }))
-    );
-  };
-
-  const handleDeleteTaskInList = (taskId: string) => {
-    setColumns((prev) =>
-      prev.map((col) => ({
-        ...col,
-        // Lọc bỏ task có id trùng khớp khỏi mọi cột
-        tasks: col.tasks.filter((t) => t.id !== taskId),
-      }))
-    );
-
-    // Đóng modal và reset selection
-    setIsModalOpen(false);
-    setSelectedTask(null);
-  };
-
-  // Drag & Drop Placeholder
-  // --- LOGIC KÉO THẢ TASK ---
+  // Drag Drop (Giữ nguyên logic cũ của bạn - đã ổn)
   const handleMoveTask = async (
     taskId: string,
     targetColumnId: string,
     newIndex?: number
   ) => {
-    // 1. Tìm cột nguồn và cột đích
     const sourceColumn = columns.find((col) =>
       col.tasks.some((t) => t.id === taskId)
     );
     const destColumn = columns.find((col) => col.id === targetColumnId);
-
     if (!sourceColumn || !destColumn) return;
-
-    // Nếu thả vào đúng vị trí cũ thì không làm gì
     if (sourceColumn.id === destColumn.id && newIndex === undefined) return;
 
-    // 2. Clone state hiện tại để sửa đổi
     const newColumns = [...columns];
-    const sourceColIndex = newColumns.findIndex(
-      (c) => c.id === sourceColumn.id
-    );
-    const destColIndex = newColumns.findIndex((c) => c.id === destColumn.id);
+    const sInd = newColumns.findIndex((c) => c.id === sourceColumn.id);
+    const dInd = newColumns.findIndex((c) => c.id === destColumn.id);
 
-    // 3. Lấy task ra khỏi cột cũ
-    const taskIndex = newColumns[sourceColIndex].tasks.findIndex(
-      (t) => t.id === taskId
-    );
-    const [movedTask] = newColumns[sourceColIndex].tasks.splice(taskIndex, 1);
+    const taskIndex = newColumns[sInd].tasks.findIndex((t) => t.id === taskId);
+    const [movedTask] = newColumns[sInd].tasks.splice(taskIndex, 1);
 
-    // 4. Chèn task vào cột mới
-    // Nếu newIndex không được cung cấp (thả vào vùng trống), mặc định xuống cuối
-    const destinationIndex =
-      newIndex !== undefined ? newIndex : newColumns[destColIndex].tasks.length;
+    // Update columnId for local state immediately
+    movedTask.columnId = targetColumnId;
 
-    newColumns[destColIndex].tasks.splice(destinationIndex, 0, movedTask);
+    const destIndex =
+      newIndex !== undefined ? newIndex : newColumns[dInd].tasks.length;
+    newColumns[dInd].tasks.splice(destIndex, 0, movedTask);
 
-    // 5. Cập nhật State UI NGAY LẬP TỨC
     setColumns(newColumns);
 
-    // 6. Gọi API cập nhật Backend (Gửi ngầm)
     try {
-      await taskApi.move(taskId, {
-        targetColumnId: targetColumnId,
-        position: destinationIndex, // Backend cần biết vị trí mới
-      });
-      // Không cần toast thông báo mỗi lần kéo thả để tránh spam
+      await taskApi.move(taskId, { targetColumnId, position: destIndex });
     } catch (error) {
-      console.error("Move task failed:", error);
-      toast.error("Không thể lưu vị trí thẻ (F5 để đồng bộ lại)");
-      // Nếu lỗi nghiêm trọng, có thể revert state ở đây (tùy chọn)
+      toast.error("Lỗi lưu vị trí");
     }
   };
 
@@ -486,10 +379,11 @@ export function BoardView({
         <Loader2 className="animate-spin w-8 h-8 text-blue-600" />
       </div>
     );
+
   return (
     <DndProvider backend={isTouchDevice() ? TouchBackend : HTML5Backend}>
       <div className="flex flex-col h-full bg-slate-50">
-        {/* Header */}
+        {/* HEADER */}
         <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-10">
           <div className="flex items-center gap-4">
             <Button
@@ -500,14 +394,20 @@ export function BoardView({
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <h2 className="text-lg font-bold text-slate-800">{projectTitle}</h2>
-            <p
-              className="text-sm text-slate-500 max-w-md truncate"
-              title={projectDesc}
-            >
-              {projectDesc || "Chưa có mô tả"}
-            </p>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                {projectTitle}
+              </h2>
+              {/* --- HIỂN THỊ DESCRIPTION CHÍNH XÁC --- */}
+              <p
+                className="text-sm text-slate-500 max-w-md truncate"
+                title={projectDesc}
+              >
+                {projectDesc || "Chưa có mô tả"}
+              </p>
+            </div>
           </div>
+
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -518,7 +418,7 @@ export function BoardView({
               <span className="hidden sm:inline">Thành viên</span>
             </Button>
 
-            {/* Nút Quản lý Nhãn Mới */}
+            {/* Nút Quản lý Nhãn */}
             <Button
               variant="ghost"
               size="icon"
@@ -529,6 +429,7 @@ export function BoardView({
               <Tag className="w-5 h-5" />
             </Button>
 
+            {/* Nút Cài đặt */}
             <Button
               variant="ghost"
               size="icon"
@@ -541,11 +442,10 @@ export function BoardView({
           </div>
         </div>
 
-        {/* Board Canvas */}
+        {/* BOARD CONTENT */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden">
           <div className="h-full flex px-4 pb-4 gap-6 pt-6">
-            {/* Render Columns */}
-            {columns.map((column, index) => (
+            {columns.map((column) => (
               <BoardColumn
                 key={column.id}
                 id={column.id}
@@ -561,7 +461,50 @@ export function BoardView({
                 onDelete={() => handleDeleteColumn(column.id)}
               />
             ))}
-        {/* Dialog Invite */}
+
+            <div className="flex-shrink-0 w-80">
+              {isAddingColumn ? (
+                <div className="bg-white rounded-xl p-3 shadow-md border border-slate-200">
+                  <Input
+                    placeholder="Tiêu đề cột..."
+                    value={newColumnTitle}
+                    onChange={(e) => setNewColumnTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
+                    autoFocus
+                    className="mb-2"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAddColumn}
+                      className="bg-blue-600 hover:bg-blue-700 h-8"
+                    >
+                      Thêm
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsAddingColumn(false)}
+                      className="h-8"
+                    >
+                      Hủy
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-12 bg-white/40 border-2 border-dashed border-slate-300 text-slate-600"
+                  onClick={() => setIsAddingColumn(true)}
+                >
+                  <Plus className="w-5 h-5 mr-2" /> Thêm cột mới
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* DIALOGS */}
         <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
           <DialogContent>
             <DialogHeader>
@@ -586,31 +529,31 @@ export function BoardView({
           </DialogContent>
         </Dialog>
 
-      {/* Settings Dialog */}
-      <ProjectSettingsDialog
-        projectId={projectId}
-        currentTitle={projectTitle}
-        currentDescription={projectDesc}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onUpdate={(newName, newDescription) => {
-          setProjectTitle(newName);
-          setProjectDesc(newDescription);
-          // Socket sẽ tự lo phần cập nhật cho người khác
-        }}
-        onDeleteSuccess={() => {
-          setIsSettingsOpen(false);
-          onBack(); // Quay về Dashboard
-        }}
-        />
-      {/* Label Management Dialog */}
-      <LabelManagementDialog
-        projectId={projectId}
-        isOpen={isLabelMgrOpen}
-        onClose={() => setIsLabelMgrOpen(false)}
+        {/* Settings Dialog - Đã sửa lỗi update description */}
+        <ProjectSettingsDialog
+          projectId={projectId}
+          currentTitle={projectTitle}
+          currentDescription={projectDesc}
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onUpdate={(newName, newDescription) => {
+            setProjectTitle(newName);
+            setProjectDesc(newDescription);
+          }}
+          onDeleteSuccess={() => {
+            setIsSettingsOpen(false);
+            onBack();
+          }}
         />
 
-        {/* Task Modal - Truyền selectedTask có chứa comments từ Board xuống */}
+        {/* Label Management Dialog - Tính năng mới */}
+        <LabelManagementDialog
+          projectId={projectId}
+          isOpen={isLabelMgrOpen}
+          onClose={() => setIsLabelMgrOpen(false)}
+        />
+
+        {/* Task Modal - Đã sửa logic xóa */}
         {selectedTask && (
           <CardDetailModal
             task={selectedTask}
@@ -619,17 +562,30 @@ export function BoardView({
               setIsModalOpen(false);
               setSelectedTask(null);
             }}
-            // Cập nhật lại list ở BoardView sau khi sửa trong Modal
-            onUpdate={handleUpdateTaskInList}
-            onDelete={handleDeleteTaskInList}
+            onUpdate={(updatedTask) => {
+              setColumns((prev) =>
+                prev.map((col) => ({
+                  ...col,
+                  tasks: col.tasks.map((t) =>
+                    t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+                  ),
+                }))
+              );
+            }}
+            onDelete={(taskId) => {
+              setColumns((prev) =>
+                prev.map((col) => ({
+                  ...col,
+                  tasks: col.tasks.filter((t) => t.id !== taskId),
+                }))
+              );
+              setIsModalOpen(false);
+              setSelectedTask(null);
+              toast.success("Đã xóa thẻ");
+            }}
           />
         )}
-          </div>
       </div>
-    </div>
     </DndProvider>
   );
 }
-
-
-
