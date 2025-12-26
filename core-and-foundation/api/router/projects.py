@@ -14,7 +14,9 @@ from migrate_nodejs_backend.projects import (
     ProjectAddMemberResponse,
     ProjectBoardResponse,
     ProjectColumnCreatedResponse,
+    ProjectDashboardResponse,
     ProjectDeleteResponse,
+    ProjectDetailData,
     ProjectDetailResponse,
     ProjectUpdateRequest,
     ProjectUpdateResponse,
@@ -23,6 +25,7 @@ from migrate_nodejs_backend.projects import (
     delete_project,
     get_project,
     get_project_board,
+    get_project_dashboard,
     update_project,
 )
 from mongo.schemas import Labels, Projects, Users
@@ -357,5 +360,38 @@ async def api_get_labels(
     return label_responses
 
 
+@router.get(
+    path="/{project_id}/dashboard",
+    response_model=ProjectDashboardResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get project dashboard",
+    description="Get the project dashboard including task statistics"
+)
+async def api_get_project_dashboard(
+    project_id: str,
+    current_user: Annotated[Users, Depends(get_current_user)],
+    request: Request,
+):
+    r"""
+    **Get project dashboard by its ID**
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing or invalid")
+    bearer_token = auth_header[len("Bearer "):]
 
-        
+    try:
+        return await get_project_dashboard(
+            project_id=project_id,
+            token=bearer_token
+        )
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except PermissionDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except BadRequestError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except InternalServerError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

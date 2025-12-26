@@ -96,7 +96,7 @@ const createProject = async (req, res) => {
             deadline: deadline ? new Date(deadline) : undefined 
         });
         
-        const defaultColumns = ['To Do', 'In Progress', 'Done'];
+        const defaultColumns = ['To Do', 'In Progress', 'Review', 'Done'];
         const columnIds = [];
         const createdColumns = [];
         
@@ -376,6 +376,118 @@ const addProjectMembers = async (req, res) => {
     }
 };
 
+/**
+ * @desc Get project details
+ * @route GET /api/v1/projects/:projectId
+ */
+const getProjectDashboard = async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const userId = req.user._id;
+
+        const project = await Project.findById(projectId)
+            .populate({ path: 'ownerId', select: 'name email avatarUrl' })
+            .populate({ path: 'members.userId', select: 'name email avatarUrl' });
+
+        if (!project) {
+            return res.status(404).json({ success: false, message: 'Project not found' });
+        }
+
+        const ownerId = project.ownerId._id || project.ownerId;
+        const isOwner = areIdsEqual(ownerId, userId);
+
+        const isMember = project.members.some(m => {
+            const mId = m.userId._id || m.userId; 
+            return areIdsEqual(mId, userId);
+        });
+        
+        if (!isMember && !isOwner) {
+            return res.status(403).json({ success: false, message: 'Access denied. User is not a member of this project' });
+        }
+
+        project_dashboard = {};
+        tasks = await Task.find({ projectId: projectId });
+        totalTasks = tasks.length;
+        to_do_tasks = 0
+        in_progress_tasks = 0
+        done_tasks = 0
+        review_tasks = 0
+        overdue_tasks = 0
+        overdue_task_lists = []
+        upcoming_deadlines_7d = []
+        team_workload = {}
+
+        for (const task of tasks) {
+            const column = await Column.findById(task.columnId);
+            if (column.title === 'To Do') to_do_tasks += 1;
+            else if (column.title === 'In Progress') in_progress_tasks += 1;
+            else if (column.title === 'Done') done_tasks += 1;
+            else if (column.title === 'Review') review_tasks += 1;
+
+            if (task.dueDate && task.dueDate < new Date() && task.status !== 'completed') {
+                overdue_tasks += 1;
+                overdue_task_lists.push({
+                    taskId: task._id.toString(),
+                    taskTitle: task.title,
+                    taskDescription: task.description ? task.description : null,
+                    dueDate: task.dueDate ? task.dueDate : null,
+                });
+            }
+            if (task.dueDate && task.dueDate >= new Date() && task.dueDate <= new Date(Date.now() + 7*24*60*60*1000)) {
+                upcoming_deadlines_7d.push({
+                    taskId: task._id.toString(),
+                    taskTitle: task.title,
+                    taskDescription: task.description ? task.description : null,
+                    dueDate: task.dueDate ? task.dueDate : null,
+                });
+            }
+            for (const assigneeId of task.assignees) {
+                const assigneeIdStr = assigneeId.toString();
+                if (!team_workload[assigneeIdStr]) {
+                    team_workload[assigneeIdStr] = 0;
+                }
+                team_workload[assigneeIdStr] += 1;
+            }
+        };
+
+        team_workload_list = [];
+        for (const [assigneeId, taskCount] of Object.entries(team_workload)) {
+            const user = await User.findById(assigneeId).select('name email avatarUrl');
+            team_workload_list.push({
+                userId: assigneeId.toString(),
+                userName: user ? user.name : 'Unknown User',
+                taskCount: taskCount
+            });
+        }
+
+        completion_rate = totalTasks === 0 ? 0 : (done_tasks / totalTasks) * 100;
+
+        project_dashboard = {
+            totalTasks,
+            to_do_tasks,
+            in_progress_tasks,
+            done_tasks,
+            review_tasks,
+            overdue_tasks,
+            overdue_task_lists,
+            upcoming_deadlines_7d,
+            completion_rate,
+            team_workload_list
+        }
+
+
+
+        res.status(200).json({
+            success: true,
+            data: project_dashboard,
+        });
+
+    } catch (error) {
+        console.error('Error fetching project details:', error);
+        res.status(500).json({ success: false, message: 'Server error at project details', error: error.message });
+    }
+}
+
 module.exports = {
     getAllWorkspaces,
     createProject,
@@ -383,4 +495,5 @@ module.exports = {
     updateProject,
     deleteProject,
     addProjectMembers,
+    getProjectDashboard,
 };

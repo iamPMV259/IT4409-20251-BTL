@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.router import authentication, columns, projects, tasks, workspaces
+from api.router import authentication, columns, projects, search, tasks, workspaces
 from api.websocket import (
     count_active_connections,
     count_total_rooms,
@@ -57,6 +57,7 @@ app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(columns.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
+app.include_router(search.router, prefix="/api/v1")
 app.include_router(ws_router)
 
 

@@ -43,6 +43,32 @@ router.get('/:projectId', GetController.getProjectDetail);
 
 /**
  * @swagger
+ * /projects/{projectId}/dashboard:
+ *   get:
+ *     summary: Get project dashboard
+ *     description: Retrieve project details along with task statistics for dashboard view
+ *     tags: [Projects]
+ *     security:
+ *     - bearerAuth: []
+ *     parameters:
+ *     - in: path
+ *       name: projectId
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: Project ID
+ *     responses:
+ *       200:
+ *         description: Project dashboard details
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Project not found
+ */
+router.get('/:projectId/dashboard', GetController.getProjectDashboard);
+
+/**
+ * @swagger
  * /projects/{projectId}/board:
  *   get:
  *     summary: Get project board
