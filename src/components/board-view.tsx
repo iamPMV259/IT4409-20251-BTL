@@ -407,7 +407,6 @@ export function BoardView({
     // Đóng modal và reset selection
     setIsModalOpen(false);
     setSelectedTask(null);
-    toast.success("Đã xóa thẻ");
   };
 
   // Drag & Drop Placeholder
@@ -619,7 +618,6 @@ export function BoardView({
             onClose={() => {
               setIsModalOpen(false);
               setSelectedTask(null);
-              toast.success("Đã xóa thẻ");
             }}
             // Cập nhật lại list ở BoardView sau khi sửa trong Modal
             onUpdate={handleUpdateTaskInList}
