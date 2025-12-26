@@ -136,6 +136,7 @@ class ProjectDetailData(BaseModel):
 class ProjectDetailResponse(BaseModel): 
     success: bool
     data: ProjectDetailData
+import json
 
 
 async def get_project(project_id: str, token: str) -> ProjectDetailResponse:
@@ -674,3 +675,58 @@ async def get_projects(workspace_id: str, token: str) -> ProjectListResponse:
             else:
                 error_message = await response.text()
                 raise InternalServerError(f"Retrieval failed: {error_message}")
+
+
+class TaskData(BaseModel):
+    taskId: str
+    taskTitle: str
+    taskDescription: Optional[str] = None
+    dueDate: Optional[datetime] = None
+
+class AssigneeData(BaseModel):
+    userId: str
+    userName: str
+    taskCount: int
+
+class DashboardData(BaseModel):
+    totalTasks: int
+    to_do_tasks: int
+    in_progress_tasks: int
+    done_tasks: int
+    review_tasks: int
+    overdue_tasks: int
+    overdue_task_lists: list[TaskData]
+    upcoming_deadlines_7d: list[TaskData]
+    completion_rate: float
+    team_workload_list: list[AssigneeData]
+
+
+class ProjectDashboardResponse(BaseModel):
+    success: bool
+    data: DashboardData
+
+
+async def get_project_dashboard(project_id: str, token: str) -> ProjectDashboardResponse:
+    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}/dashboard"
+    headers = {
+        "accept": "*/*",
+        "Authorization": f"Bearer {token}",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                logger.info(f"Project {project_id} dashboard retrieved successfully.")
+                return ProjectDashboardResponse.model_validate(data)
+            elif response.status == 401:
+                raise AuthenticationError("Invalid or expired token.")
+            elif response.status == 404:
+                raise NotFoundError(f"Project with ID {project_id} not found.")
+            elif response.status == 403:
+                raise PermissionDeniedError(f"Permission denied for project ID {project_id}.")
+            else:
+                error_message = await response.text()
+                raise InternalServerError(f"Retrieval failed: {error_message}")
+
+
+
