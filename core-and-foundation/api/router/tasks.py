@@ -885,6 +885,7 @@ async def get_my_tasks(
     current_user: Annotated[Users, Depends(get_current_user)],
     project_id: Optional[UUID] = Query(None, description="Filter by project ID"),
     label_id: Optional[UUID] = Query(None, description="Filter by label ID"),
+    no_due_date: Optional[bool] = Query(None, description="Filter tasks with no due date"),
     overdue: Optional[bool] = Query(None, description="Filter overdue tasks"),
     this_week: Optional[bool] = Query(None, description="Filter tasks due this week"),
 ):
@@ -906,10 +907,18 @@ async def get_my_tasks(
     
     now = datetime.now(timezone.utc)
     
+    def to_utc(dt: Optional[datetime]) -> Optional[datetime]:
+        """Ensure datetime is timezone-aware for comparison."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    
     if overdue:
         tasks = [
             task for task in tasks
-            if task.dueDate and task.dueDate < now
+            if task.dueDate and to_utc(task.dueDate) < now
         ]
     
     if this_week:
@@ -917,7 +926,13 @@ async def get_my_tasks(
         week_end = now + timedelta(days=7)
         tasks = [
             task for task in tasks
-            if task.dueDate and now <= task.dueDate <= week_end
+            if task.dueDate and now <= to_utc(task.dueDate) <= week_end
+        ]
+    
+    if no_due_date:
+        tasks = [
+            task for task in tasks
+            if not task.dueDate
         ]
     
     task_responses = [
@@ -938,10 +953,18 @@ async def get_my_tasks(
         for task in tasks
     ]
     
+    def normalize_datetime(dt: Optional[datetime]) -> datetime:
+        """Ensure datetime is timezone-aware for consistent comparison."""
+        if dt is None:
+            return datetime.max.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    
     task_responses.sort(
         key=lambda t: (
-            t.dueDate if t.dueDate else datetime.max.replace(tzinfo=timezone.utc),
-            t.createdAt
+            normalize_datetime(t.dueDate),
+            normalize_datetime(t.createdAt)
         )
     )
     
