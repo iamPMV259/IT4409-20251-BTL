@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 // --- CONFIGURATION ---
-const BASE_URL = '/api/v1';
+// Sử dụng environment variable để hỗ trợ cả development và production
+// Development: /api/v1 (proxy qua Vite)
+// Production: http://131.153.239.187:8345/api/v1 (direct)
+const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 
 const api = axios.create({
   baseURL: BASE_URL,
