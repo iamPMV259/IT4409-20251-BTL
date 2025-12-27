@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -6,12 +7,12 @@ from pydantic import BaseModel
 
 from api.dependencies import get_current_user
 from mongo.schemas import Columns, Labels, Projects, Tasks, Users
+from utils.task_models import LabelResponse, TaskResponse
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
 
-from datetime import datetime
 
 
 class ProjectSearchResponse(BaseModel):
@@ -123,135 +124,172 @@ async def search_tasks(query: str, current_user: Annotated[Users, Depends(get_cu
 
     return matching_tasks
 
-# class TeamWorkTasks(BaseModel):
-#     userId: str
-#     userName: str
-#     tasksAssigned: int
+@router.get(
+    path="/me/labels",
+    response_model=list[LabelResponse],
+    summary="Get my labels",
+    description="Get all labels from projects the current user is a member of"
+)
+async def get_my_labels(
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    **Get all labels from projects the current user is a member of**
+    """
+    projects = await Projects.find_all().to_list()
+    user_labels: list[LabelResponse] = []
 
-# class Assignees(BaseModel):
-#     userId: str
-#     userName: str
-
-# class TaskData(BaseModel):
-#     taskId: str
-#     taskTitle: str
-#     dueDate: datetime
-#     assignees: list[Assignees]
-#     labels: list[LabelData]
     
 
-# class ProjectDashboardResponse(BaseModel):
-#     totalTasks: int
-#     inProgressTasks: int
-#     doneTasks: int
-#     overdueTasks: int
-#     reviewTasks: int
-#     toDoTasks: int
-#     teamWorkload: list[TeamWorkTasks]
-#     overdueTasksDetails: list[TaskData]
-#     upcomingDeadlines7d: list[TaskData]
+    for project in projects:
+        if any(member.userId == current_user.id for member in project.members):
+            from mongo.schemas import Labels
+            labels = await Labels.find(Labels.projectId == project.id).to_list()
+            for label in labels:
+                user_labels.append(LabelResponse(
+                    id=str(label.id),
+                    projectId=str(label.projectId),
+                    text=label.text,
+                    color=label.color
+                ))
 
-# @router.get(
-#     path="/projects/dashboard",
-#     response_model=ProjectDashboardResponse,
-#     status_code=status.HTTP_200_OK,
-#     summary="Get project dashboard data",
-#     description="Get aggregated dashboard data for projects the current user is a member of"    
-# )
-# async def get_project_dashboard(project_id: str,current_user: Annotated[Users, Depends(get_current_user)]):
-#     r"""
-#     **Get project dashboard data**
-#     **Args:**
-#         - `project_id`: The ID of the project
-#     """
-#     project = await Projects.find_one(Projects.id == UUID(project_id))
-#     if project:
-#         tasks = await Tasks.find(Tasks.projectId == project.id).to_list()
-#         total_tasks = len(tasks)
-#         in_progress_tasks = 0
-#         done_tasks = 0
-#         overdue_tasks = 0
-#         review_tasks = 0
-#         to_do_tasks = 0
-#         team_workload_dict: dict[str, int] = {}
-#         overdue_tasks_details: list[TaskData] = []
-#         upcoming_deadlines_7d: list[TaskData] = []
+    labels_dict = {str(label.text): label for label in user_labels}
+
+    user_labels = list(labels_dict.values())
+    
+
+    return user_labels
+
+@router.get(
+    "/me/tasks",
+    response_model=List[TaskResponse],
+    summary="Get my tasks",
+    description="Get all tasks assigned to current user"
+)
+async def get_my_tasks(
+    current_user: Annotated[Users, Depends(get_current_user)],
+    project_id: Optional[UUID] = Query(None, description="Filter by project ID"),
+    label_text: Optional[str] = Query(None, description="Filter by label text"),
+    no_due_date: Optional[bool] = Query(None, description="Filter tasks with no due date"),
+    overdue: Optional[bool] = Query(None, description="Filter overdue tasks"),
+    this_week: Optional[bool] = Query(None, description="Filter tasks due this week"),
+):
+    """
+    Get all tasks assigned to the current user
+    """
+    tasks = await Tasks.find_all().to_list()
+    tasks = [task for task in tasks if current_user.id in task.assignees]
+
+    if project_id:
+        tasks = [task for task in tasks if task.projectId == project_id]
+    
+    if label_text:
+        from mongo.schemas import Labels
+        matching_label_ids: list[UUID] = []
+        labels = await Labels.find(Labels.text == label_text).to_list()
+        for label in labels:
+            matching_label_ids.append(label.id)
+        
+        tasks = [
+            task for task in tasks
+            if any(label_id in matching_label_ids for label_id in task.labels)
+        ]
+    
+    now = datetime.now(timezone.utc)
+    
+    def to_utc(dt: Optional[datetime]) -> Optional[datetime]:
+        """Ensure datetime is timezone-aware for comparison."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    
+    if overdue:
+        tasks = [
+            task for task in tasks
+            if task.dueDate and to_utc(task.dueDate) < now
+        ]
+    
+    if this_week:
+        from datetime import timedelta
+        week_end = now + timedelta(days=7)
+        tasks = [
+            task for task in tasks
+            if task.dueDate and now <= to_utc(task.dueDate) <= week_end
+        ]
+    
+    if no_due_date:
+        tasks = [
+            task for task in tasks
+            if not task.dueDate
+        ]
+    
+    task_responses = [
+        TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            projectId=task.projectId,
+            columnId=task.columnId,
+            creatorId=task.creatorId,
+            assignees=task.assignees,
+            dueDate=task.dueDate,
+            labels=task.labels,
+            checklists=task.checklists,
+            createdAt=task.createdAt,
+            updatedAt=task.updatedAt
+        )
+        for task in tasks
+    ]
+    
+    def normalize_datetime(dt: Optional[datetime]) -> datetime:
+        """Ensure datetime is timezone-aware for consistent comparison."""
+        if dt is None:
+            return datetime.max.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    
+    task_responses.sort(
+        key=lambda t: (
+            normalize_datetime(t.dueDate),
+            normalize_datetime(t.createdAt)
+        )
+    )
+    
+    return task_responses
 
 
-#         for task in tasks:
-#             label: list[LabelData] = []
-#             for label_id in task.labels:
-#                 label_obj = await Labels.find_one(Labels.id == label_id)
-#                 if label_obj:
-#                     label.append(LabelData(labelId=str(label_obj.id), text=label_obj.text))
+@router.get(
+    "/me/projects",
+    response_model=List[ProjectSearchResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get my projects",
+    description="Get all projects the current user is a member of"
+)
+async def get_my_projects(
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    **Get all projects the current user is a member of**
+    """
+    projects = await Projects.find_all().to_list()
+    user_projects: list[ProjectSearchResponse] = []
 
-#             column = await Columns.find_one(Columns.id == task.columnId)
-#             if column.title == "In Progress":
-#                 in_progress_tasks += 1
-#             elif column.title == "Done":
-#                 done_tasks += 1
-#             elif column.title == "Review":
-#                 review_tasks += 1
-#             elif column.title == "To Do":
-#                 to_do_tasks += 1
+    for project in projects:
+        if any(member.userId == current_user.id for member in project.members):
+            user_projects.append(
+                ProjectSearchResponse(
+                    id=str(project.id),
+                    name=project.name,
+                    description=project.description if project.description else None,
+                    createdAt=project.createdAt,
+                    updatedAt=project.updatedAt,
+                    status=project.status,
+                    deadline=project.deadline if project.deadline else None,
+                    workspaceId=str(project.workspaceId)
+                )
+            )
 
-#             if task.dueDate and task.dueDate < datetime.utcnow():
-#                 overdue_tasks += 1
-#                 assignees_list: list[Assignees] = []
-#                 for assignee_id in task.assignees:
-#                     user = await Users.find_one(Users.id == assignee_id)
-#                     if user:
-#                         assignees_list.append(Assignees(userId=str(user.id), userName=user.name))
-#                 overdue_tasks_details.append(
-#                     TaskData(
-#                         taskId=str(task.id),
-#                         taskTitle=task.title,
-#                         dueDate=task.dueDate,
-#                         assignees=assignees_list,
-#                         labels=label
-#                     )
-#                 )
-
-#             if task.dueDate and 0 <= (task.dueDate - datetime.utcnow()).days <= 7:
-#                 assignees_list: list[Assignees] = []
-#                 for assignee_id in task.assignees:
-#                     user = await Users.find_one(Users.id == assignee_id)
-#                     if user:
-#                         assignees_list.append(Assignees(userId=str(user.id), userName=user.name))
-#                 upcoming_deadlines_7d.append(
-#                     TaskData(
-#                         taskId=str(task.id),
-#                         taskTitle=task.title,
-#                         dueDate=task.dueDate,
-#                         assignees=assignees_list,
-#                         labels=label
-#                     )
-#                 )
-
-#             for assignee_id in task.assignees:
-#                 team_workload_dict[str(assignee_id)] = team_workload_dict.get(str(assignee_id), 0) + 1
-
-#         team_workload: list[TeamWorkTasks] = []
-#         for user_id, task_count in team_workload_dict.items():
-#             user = await Users.find_one(Users.id == UUID(user_id))
-#             if user:
-#                 team_workload.append(
-#                     TeamWorkTasks(
-#                         userId=user_id,
-#                         userName=user.name,
-#                         tasksAssigned=task_count
-#                     )
-#                 )
-
-#         return ProjectDashboardResponse(
-#             totalTasks=total_tasks,
-#             inProgressTasks=in_progress_tasks,
-#             doneTasks=done_tasks,
-#             overdueTasks=overdue_tasks,
-#             reviewTasks=review_tasks,
-#             toDoTasks=to_do_tasks,
-#             teamWorkload=team_workload,
-#             overdueTasksDetails=overdue_tasks_details,
-#             upcomingDeadlines7d=upcoming_deadlines_7d
-#         )
-
+    return user_projects
