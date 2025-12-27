@@ -70,6 +70,9 @@ async def create_task(
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this workspace")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     new_task = Tasks(
         title=task_data.title,
@@ -148,6 +151,9 @@ async def get_task(
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
 
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
+
     comments = await Comments.find(Comments.taskId == task.id).to_list()
     comments_info = []
     for comment in comments:
@@ -205,6 +211,11 @@ async def update_task(
     workspace = await Workspaces.get(project.workspaceId)
     if not workspace or not check_workspace_access(current_user, workspace):
         raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
+
+    
     
     if task_data.title is not None:
         task.title = task_data.title
@@ -287,7 +298,7 @@ async def move_task(
 
     isAdminOrOwner = (workspace.ownerId == current_user.id or project.ownerId == current_user.id)
 
-    isAssignedTask = (current_user.id in task.assignees)
+    isAssignedTask = (current_user.id in task.assignees) or (current_user.id in [member.userId for member in project.members]) or (task.creatorId == current_user.id)
     
     if not (isAdminOrOwner or isAssignedTask):
         raise PermissionDeniedError("You don't have access to this task")
