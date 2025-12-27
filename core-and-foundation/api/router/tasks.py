@@ -1076,3 +1076,74 @@ async def remove_label(
     )
 
     return task_response
+
+
+@router.delete(
+    path="/tasks/{task_id}/checklist-items/{item_text}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete checklist item",
+    description="Delete a checklist item from a task"
+)
+async def delete_checklist_item(
+    task_id: UUID,
+    item_text: str,
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    Delete a checklist item from a task
+    """
+    task = await Tasks.get(task_id)
+    if not task:
+        raise NotFoundError(f"Task with ID {task_id} not found")
+    
+    project = await Projects.get(task.projectId)
+    if not project:
+        raise NotFoundError("Project not found")
+    
+    if current_user.id not in task.assignees and current_user.id != task.creatorId:
+        raise PermissionDeniedError("You don't have access to this task")
+    
+    item_to_delete = None
+    for item in task.checklists:
+        if item.text == item_text:
+            item_to_delete = item
+            break
+    
+    if not item_to_delete:
+        raise NotFoundError("Checklist item not found")
+    
+    task.checklists.remove(item_to_delete)
+    task.updatedAt = datetime.now(timezone.utc)
+    await task.save()
+    
+    # activity = Activities(
+    #     projectId=task.projectId,
+    #     taskId=task.id,
+    #     userId=current_user.id,
+    #     action="deleted checklist item",
+    #     details={"item_text": item_to_delete.text}
+    # )
+    # await activity.insert()
+
+    asyncio.create_task(
+        ws_manager.broadcast_to_project(
+            str(project.id),
+            "server:task_updated",
+            TaskResponse(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                projectId=task.projectId,
+                columnId=task.columnId,
+                creatorId=task.creatorId,
+                assignees=task.assignees,
+                dueDate=task.dueDate,
+                labels=task.labels,
+                checklists=task.checklists,
+                createdAt=task.createdAt,
+                updatedAt=task.updatedAt
+            ).model_dump()
+        )
+    )
+
+    return None

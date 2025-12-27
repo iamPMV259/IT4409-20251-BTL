@@ -14,6 +14,13 @@ from hooks.http_errors import (
 from utils import base64_to_uuid
 
 logger = get_logger("nodejs-backend-workspaces")
+from uuid import UUID
+
+
+async def convert_base64_id_to_uuid(base64_id: str) -> UUID:
+    if isinstance(base64_id, UUID):
+        return base64_id
+    return base64_to_uuid(base64_id)
 
 
 class ProjectMember(BaseModel):
@@ -265,7 +272,41 @@ async def create_project(workspace_id: str, project_data: ProjectCreateRequest, 
             if response.status == 201:
                 data = await response.json()
                 logger.info(f"Project created successfully in workspace {workspace_id}.")
-                return ProjectCreatedResponse.model_validate(data)
+                inintial_columns = [InitialColumn(
+                    id=str(await convert_base64_id_to_uuid(item["_id"])),
+                    title=item["title"],
+                    project_id=str(await convert_base64_id_to_uuid(item["projectId"])),
+                    task_order=item["taskOrder"],
+                    created_at=item["createdAt"],
+                    updated_at=item["updatedAt"],
+                ) for item in data.get("initialColumns", []
+                )]
+                pj_data = ProjectData(
+                    id=str(await convert_base64_id_to_uuid(data["data"]["_id"])),
+                    name=data["data"]["name"],
+                    description=data["data"].get("description"),
+                    workspace_id=str(await convert_base64_id_to_uuid(data["data"]["workspaceId"])),
+                    owner_id=str(await convert_base64_id_to_uuid(data["data"]["ownerId"])),
+                    members=[ProjectMember(
+                        user_id=str(await convert_base64_id_to_uuid(member["userId"])),
+                        role=member["role"]
+                    ) for member in data["data"].get("members", [])],
+                    status=data["data"]["status"],
+                    column_order=data["data"]["columnOrder"],
+                    task_stats=TaskStats(
+                        open=data["data"]["taskStats"]["open"],
+                        closed=data["data"]["taskStats"]["closed"],
+                    ),
+                    created_at=data["data"]["createdAt"],
+                    updated_at=data["data"]["updatedAt"],
+                )
+                project_response = ProjectCreatedResponse(
+                    success=data["success"],
+                    message=data["message"],
+                    data=pj_data,
+                    initial_columns=inintial_columns,
+                )
+                return project_response
             elif response.status == 401:
                 logger.error("Authentication failed while creating project.")
                 raise AuthenticationError("Invalid or expired token.")
