@@ -53,8 +53,10 @@ export function useProjectBoard(projectId: string) {
   // Move task mutation với optimistic update
   const moveTaskMutation = useMutation({
     mutationFn: async ({ taskId, targetColumnId, position }: MoveTaskParams) => {
+      console.log('🔄 [useProjectBoard] Moving task:', { taskId, targetColumnId, position });
       const { taskApi } = await import('../lib/api');
       const response = await taskApi.move(taskId, targetColumnId, position);
+      console.log('✅ [useProjectBoard] Task moved successfully:', response.data);
       return response.data;
     },
     onMutate: async ({ taskId, targetColumnId, position }) => {
@@ -101,7 +103,12 @@ export function useProjectBoard(projectId: string) {
 
       return { previousBoard };
     },
-    onError: (err, variables, context) => {
+    onError: (err: any, variables, context) => {
+      console.error('❌ [useProjectBoard] Move task error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      console.error('Variables:', variables);
+      
       // Rollback on error
       if (context?.previousBoard) {
         queryClient.setQueryData(['project-board', projectId], context.previousBoard);

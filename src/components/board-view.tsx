@@ -319,12 +319,19 @@ export function BoardView({
     targetColumnId: string,
     newIndex?: number
   ) => {
+    console.log('🎯 [BoardView] handleMoveTask called:', { taskId, targetColumnId, newIndex });
     const sourceColumn = columns.find((col) =>
       col.tasks.some((t) => t.id === taskId)
     );
     const destColumn = columns.find((col) => col.id === targetColumnId);
-    if (!sourceColumn || !destColumn) return;
-    if (sourceColumn.id === destColumn.id && newIndex === undefined) return;
+    if (!sourceColumn || !destColumn) {
+      console.warn('⚠️ [BoardView] Source or dest column not found');
+      return;
+    }
+    if (sourceColumn.id === destColumn.id && newIndex === undefined) {
+      console.log('ℹ️ [BoardView] Same column, no position change');
+      return;
+    }
 
     // Optimistic update local state ngay lập tức
     const newColumns = [...columns];
