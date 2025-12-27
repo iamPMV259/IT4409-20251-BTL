@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { taskApi, Task as ApiTask, labelsApi, TaskLabel } from '../lib/api';
+import { taskApi, Task as ApiTask, labelsApi, TaskLabel, projectApi, Project } from '../lib/api';
 
 type ViewMode = 'list' | 'calendar';
 type QuickFilter = 'all' | 'overdue' | 'this-week' | 'no-due-date';
@@ -80,15 +80,24 @@ export function MyWorkView() {
     return () => { mounted = false; };
   }, []);
 
-  // Get unique projects
-  const projects = Array.from(new Set(tasks.map(t => t.projectName))).map(name => {
-    const task = tasks.find(t => t.projectName === name);
-    return {
-      id: task?.projectId || '',
-      name,
-      color: task?.projectColor || 'bg-slate-500',
+  // Projects from server (use API `name` field)
+  const [apiProjects, setApiProjects] = React.useState<Project[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await projectApi.getMyProjects();
+        if (!mounted) return;
+        const list: Project[] = res.data || [];
+        setApiProjects(list.map(p => ({ ...p })));
+      } catch (err) {
+        console.warn('MyWorkView: failed to load projects', err);
+      }
     };
-  });
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   // Get unique labels (prefer server labels when available)
   const allLabels = (availableLabels && availableLabels.length > 0)
@@ -451,10 +460,10 @@ export function MyWorkView() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Projects</SelectItem>
-              {projects.map(project => (
+              {apiProjects.map(project => (
                 <SelectItem key={project.id} value={project.id}>
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${project.color}`} />
+                    <div className={`w-2 h-2 rounded-full bg-slate-500`} />
                     {project.name}
                   </div>
                 </SelectItem>

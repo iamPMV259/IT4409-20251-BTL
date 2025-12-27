@@ -153,6 +153,9 @@ export const projectApi = {
   getAllByWorkspace: (workspaceId: string) => 
     api.get<Project[]>(`/workspaces/${workspaceId}/projects`),
   
+  // GET /api/v1/search/me/projects - Get projects visible to current user
+  getMyProjects: () => api.get<Project[]>('/search/me/projects'),
+  
   create: (workspaceId: string, data: { name: string; description?: string }) => 
     api.post<Project>(`/workspaces/${workspaceId}/projects`, data),
     
