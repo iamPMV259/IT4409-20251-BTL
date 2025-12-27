@@ -51,7 +51,7 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    outDir: "build",
+    outDir: "dist",
   },
   server: {
     port: 3000,
@@ -62,13 +62,6 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      // THÊM: Proxy cho WebSocket
-      // "/ws": {
-      //   target: "ws://131.153.239.187:8345", // Trỏ đến gốc của WS Server
-      //   ws: true, // Bật chế độ WebSocket
-      //   changeOrigin: true, // Quan trọng: Giả mạo Origin header để vượt qua CORS
-      //   secure: false,
-      // },
     },
   },
 });
