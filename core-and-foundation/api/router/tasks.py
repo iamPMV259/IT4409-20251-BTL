@@ -969,3 +969,110 @@ async def get_my_tasks(
     )
     
     return task_responses
+
+
+from pydantic import BaseModel
+
+from mongo.schemas import Labels
+
+
+@router.get(
+    "/tasks/{task_id}/labels",
+    response_model=List[LabelResponse],
+    summary="Get task labels",
+    description="Retrieve all labels associated with a task"
+)
+async def get_task_labels(
+    task_id: UUID,
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    Get all labels associated with a task
+    """
+    task = await Tasks.get(task_id)
+    if not task:
+        raise NotFoundError(f"Task with ID {task_id} not found")
+    
+    project = await Projects.get(task.projectId)
+    if not project:
+        raise NotFoundError("Project not found")
+    
+    labels = []
+    for label_id in task.labels:
+        label = await Labels.get(label_id)
+        if label:
+            labels.append(LabelResponse(
+                id=str(label.id),
+                projectId=str(label.projectId),
+                text=label.text,
+                color=label.color,
+            ))
+    
+    return labels
+
+@router.delete(
+    "/tasks/{task_id}/labels",
+    response_model=TaskResponse,
+    summary="Remove label from task",
+    description="Remove a label from a task"
+)
+async def remove_label(
+    task_id: UUID,
+    labels_list: list[UUID],
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    Remove a label from a task
+    """
+    task = await Tasks.get(task_id)
+    if not task:
+        raise NotFoundError(f"Task with ID {task_id} not found")
+    
+    project = await Projects.get(task.projectId)
+    if not project:
+        raise NotFoundError("Project not found")
+    
+    assignees = task.assignees + [task.creatorId]
+    if current_user.id not in assignees:
+        raise PermissionDeniedError("You don't have access to this task")
+    
+    for label_id in labels_list:
+        if label_id in task.labels:
+            task.labels.remove(label_id)
+    
+    task.updatedAt = datetime.now(timezone.utc)
+    await task.save()
+    
+    # activity = Activities(
+    #     projectId=task.projectId,
+    #     taskId=task.id,
+    #     userId=current_user.id,
+    #     action="removed label(s)",
+    #     details={"removed_label_ids": [str(label_id) for label_id in labels_list]}
+    # )
+    # await activity.insert()
+    
+    task_response = TaskResponse(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        projectId=task.projectId,
+        columnId=task.columnId,
+        creatorId=task.creatorId,
+        assignees=task.assignees,
+        dueDate=task.dueDate,
+        labels=task.labels,
+        checklists=task.checklists,
+        createdAt=task.createdAt,
+        updatedAt=task.updatedAt
+    )
+
+    asyncio.create_task(
+        ws_manager.broadcast_to_project(
+            str(project.id),
+            "server:task_updated",
+            task_response.model_dump()
+        )
+    )
+
+    return task_response
