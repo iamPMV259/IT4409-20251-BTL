@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { CardDetailModal } from './card-detail-modal';
@@ -13,6 +13,8 @@ import {
 } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { projectApi, taskApi, Task as ApiTask, Column as ApiColumn, CreateTaskPayload } from '../lib/api';
+import { toast } from 'sonner';
 
 interface CalendarViewProps {
   projectId: string;
@@ -26,70 +28,82 @@ interface CalendarTask extends Task {
   columnId: string;
 }
 
-// Mock data - in a real app this would come from props or context
-const MOCK_TASKS: CalendarTask[] = [
-  {
-    id: '1',
-    title: 'Design homepage wireframes',
-    description: 'Create low-fidelity wireframes for the homepage',
-    assignees: [
-      { name: 'John Doe', avatar: '' },
-      { name: 'Jane Smith', avatar: '' },
-    ],
-    dueDate: '2025-10-25',
-    labels: [{ color: 'bg-purple-500', name: 'Design' }],
-    checklist: { total: 5, completed: 2 },
-    comments: 3,
-    attachments: 1,
-    columnId: 'todo',
-  },
-  {
-    id: '3',
-    title: 'Implement user authentication',
-    description: 'Add login and signup functionality',
-    assignees: [{ name: 'Alice Johnson', avatar: '' }],
-    dueDate: '2025-10-30',
-    labels: [
-      { color: 'bg-blue-500', name: 'Development' },
-      { color: 'bg-orange-500', name: 'Urgent' },
-    ],
-    checklist: { total: 3, completed: 1 },
-    comments: 5,
-    attachments: 2,
-    columnId: 'in-progress',
-  },
-  {
-    id: '7',
-    title: 'Update API documentation',
-    assignees: [{ name: 'Bob Wilson', avatar: '' }],
-    dueDate: '2025-10-28',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-    comments: 2,
-    attachments: 0,
-    columnId: 'in-progress',
-  },
-  {
-    id: '8',
-    title: 'Client presentation',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-11-05',
-    labels: [{ color: 'bg-green-500', name: 'Feature' }],
-    comments: 1,
-    attachments: 2,
-    columnId: 'review',
-  },
-];
+// Convert API Task to CalendarTask
+const convertApiTaskToCalendarTask = (apiTask: ApiTask, columnId: string): CalendarTask => {
+  const assignees = (apiTask.assignees || []).map((a: any) => 
+    typeof a === 'string' ? { name: a, avatar: '' } : { name: a.name || a.id || '', avatar: a.avatar || '' }
+  );
+  
+  const labels = (apiTask.labels || []).map((l: any) => 
+    typeof l === 'string' ? { name: l, color: 'bg-slate-400' } : { name: l.name || l.id || '', color: l.color || 'bg-slate-400' }
+  );
+  
+  const checklist = (apiTask as any).checklist || { 
+    total: (apiTask as any).checklists?.length || 0, 
+    completed: 0 
+  };
+  
+  return {
+    id: apiTask.id,
+    title: apiTask.title,
+    description: apiTask.description || '',
+    assignees,
+    labels,
+    dueDate: apiTask.dueDate,
+    checklist,
+    comments: apiTask.comments || 0,
+    attachments: apiTask.attachments || 0,
+    columnId,
+  };
+};
 
 export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
-  const [tasks, setTasks] = useState<CalendarTask[]>(MOCK_TASKS);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [draggedTask, setDraggedTask] = useState<CalendarTask | null>(null);
+  
+  // Fetch tasks from API
+  useEffect(() => {
+    const fetchTasks = async () => {
+      if (!projectId) return;
+      
+      setIsLoading(true);
+      try {
+        // Fetch project detail to get columns and tasks
+        const { data: projectData } = await projectApi.getDetail(projectId);
+        
+        if (projectData && Array.isArray((projectData as any).columns)) {
+          // Collect all tasks from all columns
+          const allTasks: CalendarTask[] = [];
+          (projectData as any).columns.forEach((col: ApiColumn) => {
+            if (Array.isArray(col.tasks)) {
+              col.tasks.forEach((task: ApiTask) => {
+                allTasks.push(convertApiTaskToCalendarTask(task, col.id));
+              });
+            }
+          });
+          setTasks(allTasks);
+        } else {
+          setTasks([]);
+        }
+      } catch (error) {
+        console.error('Error fetching calendar tasks:', error);
+        toast.error('Không thể tải dữ liệu calendar');
+        setTasks([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchTasks();
+  }, [projectId]);
 
   // Calendar navigation
   const goToPrevious = () => {
@@ -158,12 +172,31 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
     setIsModalOpen(true);
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
+  const handleUpdateTask = async (updatedTask: Task) => {
+    // Update local state immediately
     setTasks(tasks.map(task => 
       task.id === updatedTask.id 
         ? { ...task, ...updatedTask }
         : task
     ));
+    
+    // Optionally refresh from server to ensure sync
+    try {
+      const { data: projectData } = await projectApi.getDetail(projectId);
+      if (projectData && Array.isArray((projectData as any).columns)) {
+        const allTasks: CalendarTask[] = [];
+        (projectData as any).columns.forEach((col: ApiColumn) => {
+          if (Array.isArray(col.tasks)) {
+            col.tasks.forEach((task: ApiTask) => {
+              allTasks.push(convertApiTaskToCalendarTask(task, col.id));
+            });
+          }
+        });
+        setTasks(allTasks);
+      }
+    } catch (error) {
+      console.error('Error refreshing tasks after update:', error);
+    }
   };
 
   const handleDateClick = (date: Date) => {
@@ -171,21 +204,49 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
     setIsCreateModalOpen(true);
   };
 
-  const handleCreateTask = () => {
-    if (newTaskTitle.trim() && selectedDate) {
-      const newTask: CalendarTask = {
-        id: Date.now().toString(),
-        title: newTaskTitle,
+  const handleCreateTask = async () => {
+    if (!newTaskTitle.trim() || !selectedDate) return;
+    
+    try {
+      // Get first column from project (usually "To Do" column)
+      const { data: projectData } = await projectApi.getDetail(projectId);
+      let columnId = '';
+      
+      if (projectData && Array.isArray((projectData as any).columns) && (projectData as any).columns.length > 0) {
+        columnId = (projectData as any).columns[0].id;
+      } else {
+        // If no columns, create default columns first
+        const { data: newColumns } = await projectApi.createDefaultColumns(projectId);
+        if (Array.isArray(newColumns) && newColumns.length > 0) {
+          columnId = newColumns[0].id;
+        }
+      }
+      
+      if (!columnId) {
+        toast.error('Không thể tạo task: không tìm thấy cột');
+        return;
+      }
+      
+      // Create task via API
+      const payload = {
+        title: newTaskTitle.trim(),
+        description: '',
+        dueDate: selectedDate.toISOString().split('T')[0],
         assignees: [],
         labels: [],
-        comments: 0,
-        attachments: 0,
-        dueDate: selectedDate.toISOString().split('T')[0],
-        columnId: 'todo',
       };
-      setTasks([...tasks, newTask]);
+      
+      const { data: newTask } = await taskApi.create(columnId, payload);
+      
+      // Convert and add to tasks
+      const calendarTask = convertApiTaskToCalendarTask(newTask, columnId);
+      setTasks([...tasks, calendarTask]);
       setNewTaskTitle('');
       setIsCreateModalOpen(false);
+      toast.success('Đã tạo task mới');
+    } catch (error) {
+      console.error('Error creating task:', error);
+      toast.error('Không thể tạo task mới');
     }
   };
 
@@ -193,15 +254,29 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
     setDraggedTask(task);
   };
 
-  const handleDrop = (date: Date) => {
-    if (draggedTask) {
+  const handleDrop = async (date: Date) => {
+    if (!draggedTask) return;
+    
+    try {
+      const newDueDate = date.toISOString().split('T')[0];
+      
+      // Update task via API
+      await taskApi.update(draggedTask.id, {
+        dueDate: newDueDate,
+      });
+      
+      // Update local state
       const updatedTasks = tasks.map(task =>
         task.id === draggedTask.id
-          ? { ...task, dueDate: date.toISOString().split('T')[0] }
+          ? { ...task, dueDate: newDueDate }
           : task
       );
       setTasks(updatedTasks);
       setDraggedTask(null);
+      toast.success('Đã cập nhật due date');
+    } catch (error) {
+      console.error('Error updating task due date:', error);
+      toast.error('Không thể cập nhật due date');
     }
   };
 
@@ -227,6 +302,14 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
   };
 
   const monthDates = getMonthDates();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-50">

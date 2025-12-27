@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { taskApi, Task as ApiTask } from '../lib/api';
+import { taskApi, Task as ApiTask, labelsApi, TaskLabel } from '../lib/api';
 
 type ViewMode = 'list' | 'calendar';
 type QuickFilter = 'all' | 'overdue' | 'this-week' | 'no-due-date';
@@ -50,12 +50,35 @@ export function MyWorkView() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [tasks, setTasks] = useState<MyTask[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<TaskLabel[]>([]);
   const [selectedTask, setSelectedTask] = useState<MyTask | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
   // Calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  // Load labels on mount so we can display label text in dropdown and badges
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await labelsApi.getMyLabels();
+        if (!mounted) return;
+        const list = (res.data || []).map((obj: any) => ({
+          id: obj.id || obj._id,
+          name: obj.text || obj.name || obj.title || obj.id,
+          color: obj.color || obj.color_code || 'bg-slate-400',
+        }));
+        console.log('MyWorkView: loaded labels', list);
+        setAvailableLabels(list);
+      } catch (err) {
+        console.warn('MyWorkView: failed to load labels', err);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   // Get unique projects
   const projects = Array.from(new Set(tasks.map(t => t.projectName))).map(name => {
@@ -67,10 +90,10 @@ export function MyWorkView() {
     };
   });
 
-  // Get unique labels
-  const allLabels = Array.from(
-    new Set(tasks.flatMap(t => t.labels.map(l => l.name)))
-  );
+  // Get unique labels (prefer server labels when available)
+  const allLabels = (availableLabels && availableLabels.length > 0)
+    ? availableLabels.map(l => l.name || (l as any).text || l.id || '')
+    : Array.from(new Set(tasks.flatMap(t => (t.labels || []).map((l: any) => (l && l.name) || (typeof l === 'string' ? l : '')))));
 
   // Filter tasks
   const filteredTasks = tasks.filter(task => {
@@ -200,14 +223,24 @@ export function MyWorkView() {
   };
 
   // Convert API Task to UI MyTask
-  const convertApiTask = (t: ApiTask): MyTask => {
+  const convertApiTask = (t: ApiTask, labelLookup?: TaskLabel[]): MyTask => {
     const assignees = (t.assignees || []).map(a =>
       typeof a === 'string' ? { name: a } : { id: (a as any).id, name: (a as any).name, avatar: (a as any).avatar }
     );
 
-    const labels = (t.labels || []).map(l =>
-      typeof l === 'string' ? { name: l, color: 'bg-slate-400' } : { id: (l as any).id, name: (l as any).name, color: (l as any).color || 'bg-slate-400' }
-    );
+    const lookup = labelLookup || availableLabels || [];
+    const labels = (t.labels || []).map(l => {
+      if (typeof l === 'string') {
+        const found = lookup.find(x => x.id === l || x.name === l || (x as any).text === l);
+        return {
+          id: l,
+          name: found ? (found.name || (found as any).text || l) : l,
+          color: found ? found.color : 'bg-slate-400',
+        } as any;
+      }
+      const obj: any = l;
+      return { id: obj.id || obj._id, name: obj.text || obj.name || '', color: obj.color || obj.color_code || 'bg-slate-400' } as any;
+    });
 
     const projectId = (t as any).projectId || (t as any).project_id || '';
     const projectName = (t as any).projectName || (t as any).project_name || '';
@@ -241,15 +274,62 @@ export function MyWorkView() {
       try {
         const params: any = {};
         if (selectedProject !== 'all') params.project_id = selectedProject;
-        if (selectedLabels.length > 0) params.label_id = selectedLabels[0];
         if (quickFilter === 'overdue') params.overdue = true;
         if (quickFilter === 'this-week') params.this_week = true;
         if (quickFilter === 'no-due-date') params.no_due_date = true;
 
+        // Fetch available labels first so we can resolve label IDs to text
+        let labelLookup: TaskLabel[] = availableLabels || [];
+        try {
+          const labRes = await labelsApi.getMyLabels();
+          labelLookup = (labRes.data || []).map((obj: any) => ({
+            id: obj.id || obj._id,
+            name: obj.text || obj.name || obj.title || obj.id,
+            color: obj.color || obj.color_code || 'bg-slate-400',
+          }));
+          console.log('MyWorkView: fetched labels in fetchTasks', labelLookup);
+          setAvailableLabels(labelLookup);
+        } catch (e) {
+          // ignore label fetch errors
+        }
+
+        // Map selected label display name to label_id param (if any)
+        if (selectedLabels.length > 0) {
+          const selName = selectedLabels[0];
+          const sel = (labelLookup || []).find(l => l.name === selName || (l as any).text === selName || l.id === selName);
+          if (sel && sel.id) params.label_id = sel.id;
+          else params.label_id = selectedLabels[0];
+        }
+
         const res = await taskApi.getMyTasks(params);
         if (!isMounted) return;
-        const data = res.data || [];
-        setTasks(data.map(convertApiTask));
+        let data = res.data || [];
+        // If labelLookup is empty, try to build it from task label objects returned in tasks
+        if ((!labelLookup || labelLookup.length === 0) && Array.isArray(data)) {
+          const mapById: Record<string, TaskLabel> = {};
+          data.forEach((t: any) => {
+            (t.labels || []).forEach((l: any) => {
+              if (l && typeof l !== 'string' && (l.id || l.text || l.name)) {
+                const id = l.id || l._id || l.name || l.text;
+                if (!mapById[id]) {
+                  mapById[id] = {
+                    id,
+                    name: l.text || l.name || id,
+                    color: l.color || l.color_code || 'bg-slate-400',
+                  };
+                }
+              }
+            });
+          });
+          const extracted = Object.values(mapById);
+          if (extracted.length > 0) {
+            labelLookup = extracted;
+            setAvailableLabels(extracted);
+          }
+        }
+
+        // convert using the label lookup so IDs map to text
+        setTasks(data.map((t: ApiTask) => convertApiTask(t, labelLookup as any)));
       } catch (err) {
         console.error('Failed to fetch my tasks', err);
       } finally {
@@ -426,7 +506,7 @@ export function MyWorkView() {
             <DropdownMenuContent className="w-56">
               <DropdownMenuLabel>Filter by Label</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {allLabels.map(label => (
+              {(availableLabels && availableLabels.length > 0 ? availableLabels.map(l => l.name || (l as any).text || l.id || '') : allLabels).map(label => (
                 <DropdownMenuCheckboxItem
                   key={label}
                   checked={selectedLabels.includes(label)}

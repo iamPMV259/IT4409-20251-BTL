@@ -28,7 +28,7 @@ import {
   Plus,
   Send,
 } from "lucide-react";
-import { taskApi, Task, TaskAssignee, userApi } from "../lib/api"; // Import api
+import { taskApi, Task, TaskAssignee, userApi, Comment, Comment as ApiComment, default as api } from "../lib/api"; // Import api
 import { toast } from "sonner";
 import { Calendar as CalendarComponent } from "./ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -66,6 +66,8 @@ export function CardDetailModal({
 }: CardDetailModalProps) {
   const [editedTask, setEditedTask] = useState<Task | null>(task);
   const [newComment, setNewComment] = useState("");
+  const [comments, setComments] = useState<Array<{ id: string; author: string; avatar: string; text: string; timestamp: string }>>([]);
+  const [isAddingComment, setIsAddingComment] = useState(false);
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [isAddingChecklist, setIsAddingChecklist] = useState(false);
   const [isRemovingChecklist, setIsRemovingChecklist] = useState<Set<string>>(new Set());
@@ -75,43 +77,68 @@ export function CardDetailModal({
   // snapshot of original server-side checklist items to detect deletions/changes
   const [originalChecklistItems, setOriginalChecklistItems] = useState<Array<{ id: string; text: string; checked: boolean }>>([]);
 
-  const [comments] = useState([
-    {
-      id: "1",
-      author: "Jane Smith",
-      avatar: "",
-      text: "I have completed the initial research. The main competitors are using similar layouts.",
-      timestamp: "2 hours ago",
-    },
-    {
-      id: "2",
-      author: "John Doe",
-      avatar: "",
-      text: "Great work! Let us schedule a review meeting for Friday.",
-      timestamp: "1 hour ago",
-    },
-  ]);
+  // Helper function to format comment timestamp
+  const formatCommentTimestamp = (date: Date): string => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
-  const [activities] = useState([
-    {
-      id: "1",
-      user: "John Doe",
-      action: 'moved this card from "To Do" to "In Progress"',
-      timestamp: "3 hours ago",
-    },
-    {
-      id: "2",
-      user: "Jane Smith",
-      action: "added a checklist",
-      timestamp: "4 hours ago",
-    },
-    {
-      id: "3",
-      user: "John Doe",
-      action: "created this card",
-      timestamp: "1 day ago",
-    },
-  ]);
+  // Fetch comments from API
+  useEffect(() => {
+    let mounted = true;
+    const loadComments = async () => {
+      if (!editedTask) return;
+      try {
+        const { data } = await taskApi.getComments(editedTask.id);
+        if (!mounted) return;
+        
+        // Resolve user names for comments
+        const commentsWithNames = await Promise.all(
+          data.map(async (comment: ApiComment) => {
+            let userName = comment.userName || comment.userId?.slice(0, 8) || 'Unknown';
+            if (comment.userId && !comment.userName) {
+              try {
+                const userRes = await userApi.get(comment.userId);
+                userName = userRes.data.name || userName;
+              } catch (e) {
+                console.warn('Failed to fetch user for comment', e);
+              }
+            }
+            
+            // Format timestamp
+            const timestamp = comment.createdAt 
+              ? formatCommentTimestamp(new Date(comment.createdAt))
+              : 'Just now';
+            
+            return {
+              id: comment.id,
+              author: userName,
+              avatar: comment.userAvatar || '',
+              text: comment.text,
+              timestamp,
+            };
+          })
+        );
+        
+        setComments(commentsWithNames);
+      } catch (err) {
+        console.error('Failed to fetch comments', err);
+        setComments([]);
+      }
+    };
+    
+    loadComments();
+    return () => { mounted = false; };
+  }, [editedTask?.id]);
 
   React.useEffect(() => {
     setEditedTask(task);
@@ -394,6 +421,98 @@ export function CardDetailModal({
     // Use MOCK_PROJECT_MEMBERS (has ids) so we can call API endpoints
     ...MOCK_PROJECT_MEMBERS,
   ];
+
+  const handleAddComment = async () => {
+    const text = newComment.trim();
+    if (!text || !editedTask || isAddingComment) return;
+    
+    setIsAddingComment(true);
+    try {
+      // Try different payload formats - API might expect different field name
+      let newCommentData;
+      let lastError: any = null;
+      
+      // Try with "content" first (most common for comments)
+      try {
+        console.log('Trying with "content" field');
+        const response = await api.post(`/tasks/${editedTask.id}/comments`, { content: text });
+        newCommentData = response.data;
+      } catch (error: any) {
+        lastError = error;
+        if (error?.response?.status === 422) {
+          // Try with "text" field
+          try {
+            console.log('Trying with "text" field');
+            const response = await api.post(`/tasks/${editedTask.id}/comments`, { text: text });
+            newCommentData = response.data;
+          } catch (error2: any) {
+            lastError = error2;
+            if (error2?.response?.status === 422) {
+              // Try with "message" field
+              try {
+                console.log('Trying with "message" field');
+                const response = await api.post(`/tasks/${editedTask.id}/comments`, { message: text });
+                newCommentData = response.data;
+              } catch (error3: any) {
+                lastError = error3;
+                throw error3;
+              }
+            } else {
+              throw error2;
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
+      
+      if (!newCommentData) {
+        throw lastError || new Error('No response data');
+      }
+      
+      // Resolve user name
+      let userName = newCommentData.userName || newCommentData.userId?.slice(0, 8) || 'You';
+      if (newCommentData.userId && !newCommentData.userName) {
+        try {
+          const userRes = await userApi.get(newCommentData.userId);
+          userName = userRes.data.name || userName;
+        } catch (e) {
+          console.warn('Failed to fetch user for new comment', e);
+        }
+      }
+      
+      const formattedComment = {
+        id: newCommentData.id,
+        author: userName,
+        avatar: newCommentData.userAvatar || '',
+        text: newCommentData.text || newCommentData.content || newCommentData.message || text,
+        timestamp: formatCommentTimestamp(new Date(newCommentData.createdAt || new Date())),
+      };
+      
+      setComments(prev => [...prev, formattedComment]);
+      setNewComment("");
+      toast.success('Đã thêm comment');
+    } catch (error: any) {
+      console.error('Failed to add comment', error);
+      const errorResponse = error?.response?.data;
+      const errorMessage = errorResponse?.message || error?.message || 'Không thể thêm comment';
+      const errorDetails = errorResponse;
+      
+      console.error('Error response:', errorResponse);
+      console.error('Error status:', error?.response?.status);
+      console.error('Full error:', error);
+      
+      // Show detailed error if available
+      if (errorResponse && typeof errorResponse === 'object') {
+        const errorFields = Object.keys(errorResponse).map(key => `${key}: ${JSON.stringify(errorResponse[key])}`).join(', ');
+        toast.error(`Không thể thêm comment: ${errorMessage} (${errorFields})`);
+      } else {
+        toast.error(`Không thể thêm comment: ${errorMessage}`);
+      }
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
 
   const toggleChecklistItem = (tempId: string) => {
     setChecklistItems(prev => prev.map(item => item.tempId === tempId ? { ...item, completed: !item.completed } : item));
@@ -690,15 +809,16 @@ export function CardDetailModal({
                   </Button>
                 </div>
 
-                {/* Activity & Comments */}
+                {/* Comments */}
                 <div>
-                  <Tabs defaultValue="comments" className="w-full">
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="comments">Comments</TabsTrigger>
-                      <TabsTrigger value="activity">Activity</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="comments" className="space-y-4">
-                      {comments.map((comment) => (
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-slate-900">Comments</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {comments.length === 0 ? (
+                      <p className="text-slate-500 text-sm italic">Chưa có comment nào</p>
+                    ) : (
+                      comments.map((comment) => (
                         <div key={comment.id} className="flex gap-3">
                           <Avatar className="w-8 h-8">
                             <AvatarImage src={comment.avatar} />
@@ -711,10 +831,10 @@ export function CardDetailModal({
                           </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-slate-900">
+                              <span className="text-slate-900 font-medium">
                                 {comment.author}
                               </span>
-                              <span className="text-slate-500">
+                              <span className="text-slate-500 text-sm">
                                 {comment.timestamp}
                               </span>
                             </div>
@@ -723,52 +843,38 @@ export function CardDetailModal({
                             </p>
                           </div>
                         </div>
-                      ))}
-                      <div className="flex gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="bg-blue-600 text-white">
-                            JD
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 flex gap-2">
-                          <Input
-                            placeholder="Write a comment..."
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                          />
-                          <Button
-                            size="icon"
-                            className="bg-blue-600 hover:bg-blue-700"
-                          >
-                            <Send className="w-4 h-4" />
-                          </Button>
-                        </div>
+                      ))
+                    )}
+                    <div className="flex gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="bg-blue-600 text-white">
+                          JD
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 flex gap-2">
+                        <Input
+                          placeholder="Write a comment..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleAddComment();
+                            }
+                          }}
+                          disabled={isAddingComment}
+                        />
+                        <Button
+                          size="icon"
+                          onClick={handleAddComment}
+                          disabled={isAddingComment || !newComment.trim()}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
                       </div>
-                    </TabsContent>
-                    <TabsContent value="activity" className="space-y-3">
-                      {activities.map((activity) => (
-                        <div key={activity.id} className="flex gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
-                            {activity.user
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-slate-700">
-                              <span className="text-slate-900">
-                                {activity.user}
-                              </span>{" "}
-                              {activity.action}
-                            </p>
-                            <p className="text-slate-500">
-                              {activity.timestamp}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </TabsContent>
-                  </Tabs>
+                    </div>
+                  </div>
                 </div>
               </div>
 

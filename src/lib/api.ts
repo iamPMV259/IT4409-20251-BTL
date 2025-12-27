@@ -43,6 +43,17 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+// Interface cho Comment
+export interface Comment {
+  id: string;
+  text: string;
+  userId: string;
+  userName?: string;
+  userAvatar?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Interface cho assignee hiển thị UI
 export interface TaskAssignee {
   id?: string;
@@ -242,6 +253,14 @@ export const taskApi = {
     api.patch(`/tasks/${taskId}/checklist-items/${itemId}`, payload),
   deleteChecklistItem: (taskId: string, itemText: string) =>
     api.delete(`/tasks/${taskId}/checklist-items/${encodeURIComponent(itemText)}`),
+  // Comment endpoints
+  // GET /api/v1/tasks/{task_id}/comments
+  getComments: (taskId: string) =>
+    api.get<Comment[]>(`/tasks/${taskId}/comments`),
+  // POST /api/v1/tasks/{task_id}/comments
+  // Note: API might expect "content" or "text" field - try both
+  addComment: (taskId: string, payload: { text?: string; content?: string; message?: string }) =>
+    api.post<Comment>(`/tasks/${taskId}/comments`, payload),
   // GET /api/v1/me/tasks - Get tasks assigned to current user with optional filters
   getMyTasks: (params?: {
     project_id?: string;
@@ -249,7 +268,13 @@ export const taskApi = {
     no_due_date?: boolean;
     overdue?: boolean;
     this_week?: boolean;
-  }) => api.get<Task[]>('/me/tasks', { params }),
+  }) => api.get<Task[]>('/search/me/tasks', { params }),
+};
+
+// Labels API - fetch labels visible to current user
+export const labelsApi = {
+  // GET /api/v1/search/me/labels
+  getMyLabels: () => api.get<any[]>('/search/me/labels'),
 };
 
 export default api;
