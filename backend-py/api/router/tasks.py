@@ -884,7 +884,7 @@ async def update_checklist_item(
 async def get_my_tasks(
     current_user: Annotated[Users, Depends(get_current_user)],
     project_id: Optional[UUID] = Query(None, description="Filter by project ID"),
-    label_id: Optional[UUID] = Query(None, description="Filter by label ID"),
+    label_text: Optional[str] = Query(None, description="Filter by label text"),
     no_due_date: Optional[bool] = Query(None, description="Filter tasks with no due date"),
     overdue: Optional[bool] = Query(None, description="Filter overdue tasks"),
     this_week: Optional[bool] = Query(None, description="Filter tasks due this week"),
@@ -892,18 +892,23 @@ async def get_my_tasks(
     """
     Get all tasks assigned to the current user
     """
-    query_conditions = [Tasks.assignees == current_user.id]
-    
+    tasks = await Tasks.find_all().to_list()
+    tasks = [task for task in tasks if current_user.id in task.assignees]
+
     if project_id:
-        query_conditions.append(Tasks.projectId == project_id)
+        tasks = [task for task in tasks if task.projectId == project_id]
     
-    if label_id:
-        query_conditions.append(Tasks.labels == label_id)
-    
-    if len(query_conditions) == 1:
-        tasks = await Tasks.find(query_conditions[0]).to_list()
-    else:
-        tasks = await Tasks.find(*query_conditions).to_list()
+    if label_text:
+        from mongo.schemas import Labels
+        matching_label_ids: list[UUID] = []
+        labels = await Labels.find(Labels.text == label_text).to_list()
+        for label in labels:
+            matching_label_ids.append(label.id)
+        
+        tasks = [
+            task for task in tasks
+            if any(label_id in matching_label_ids for label_id in task.labels)
+        ]
     
     now = datetime.now(timezone.utc)
     
@@ -1147,3 +1152,38 @@ async def delete_checklist_item(
     )
 
     return None
+
+
+@router.get(
+    path="/me/labels",
+    response_model=list[LabelResponse],
+    summary="Get my labels",
+    description="Get all labels from projects the current user is a member of"
+)
+async def get_my_labels(
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    **Get all labels from projects the current user is a member of**
+    """
+    projects = await Projects.find_all().to_list()
+    user_labels: list[LabelResponse] = []
+
+    
+
+    for project in projects:
+        if any(member.userId == current_user.id for member in project.members):
+            from mongo.schemas import Labels
+            labels = await Labels.find(Labels.projectId == project.id).to_list()
+            for label in labels:
+                user_labels.append(LabelResponse(
+                    id=str(label.id),
+                    projectId=str(label.projectId),
+                    text=label.text,
+                    color=label.color
+                ))
+
+    labels_dict = {label.id: label for label in user_labels}
+    
+
+    return user_labels
