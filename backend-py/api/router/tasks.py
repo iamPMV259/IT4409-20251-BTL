@@ -68,8 +68,8 @@ async def create_task(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this workspace")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this workspace")
 
     if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
         raise PermissionDeniedError("You don't have access to this project")
@@ -148,8 +148,8 @@ async def get_task(
     
     from mongo.schemas import Comments, Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
 
     if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
         raise PermissionDeniedError("You don't have access to this project")
@@ -209,8 +209,8 @@ async def update_task(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
 
     if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
         raise PermissionDeniedError("You don't have access to this project")
@@ -408,8 +408,11 @@ async def delete_task(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     column = await Columns.get(task.columnId)
     if column and task_id in column.taskOrder:
@@ -465,8 +468,11 @@ async def add_assignee(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     if assignee_data.userId in task.assignees:
         raise ValidationError("User is already assigned to this task")
@@ -542,8 +548,11 @@ async def remove_assignee(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     if user_id not in task.assignees:
         raise ValidationError("User is not assigned to this task")
@@ -614,8 +623,11 @@ async def add_label(
     
     from mongo.schemas import Labels, Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     label = await Labels.get(label_data.labelId)
     if not label:
@@ -691,8 +703,11 @@ async def add_comment(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
+
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
     
     new_comment = Comments(
         taskId=task_id,
@@ -755,9 +770,12 @@ async def add_checklist_item(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
     
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
+
     new_item = ChecklistItem(
         text=item_data.text,
         checked=item_data.checked or False
@@ -830,9 +848,12 @@ async def update_checklist_item(
     
     from mongo.schemas import Workspaces
     workspace = await Workspaces.get(project.workspaceId)
-    if not workspace or not check_workspace_access(current_user, workspace):
-        raise PermissionDeniedError("You don't have access to this task")
+    # if not workspace or not check_workspace_access(current_user, workspace):
+    #     raise PermissionDeniedError("You don't have access to this task")
     
+    if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+        raise PermissionDeniedError("You don't have access to this project")
+
     if item_index < 0 or item_index >= len(task.checklists):
         raise NotFoundError("Checklist item not found")
     
@@ -914,6 +935,9 @@ async def get_task_labels(
     project = await Projects.get(task.projectId)
     if not project:
         raise NotFoundError("Project not found")
+    
+    # if (current_user.id not in [member.userId for member in project.members] and current_user.id != project.ownerId):
+    #     raise PermissionDeniedError("You don't have access to this project")
     
     labels = []
     for label_id in task.labels:
