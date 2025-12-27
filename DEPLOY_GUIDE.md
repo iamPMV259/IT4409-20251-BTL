@@ -8,19 +8,17 @@
 
 ## ⚠️ Setup Local Environment (Lần đầu clone project)
 
-**Bước 1:** Tạo file `.env.development` từ template:
-```bash
-# Development environment - sử dụng proxy của Vite
+Tạo file `.env.development` trong thư mục root:
+```env
 VITE_API_BASE_URL=/api/v1
 ```
 
-**Bước 2:** Tạo file `.env.production` (optional, chỉ cần nếu build local):
-```bash
-# Production environment - gọi trực tiếp đến backend server
+Tạo file `.env.production` (optional):
+```env
 VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
 ```
 
-> 💡 **Lưu ý:** Các file `.env.*` đã được thêm vào `.gitignore` để bảo mật!
+> 🔒 **Bảo mật:** Tất cả file `.env*` đã được thêm vào `.gitignore` và không được commit lên Git!
 
 ## 📝 Các bước để Fix trên Vercel:
 
@@ -40,6 +38,8 @@ VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
 
 1. Tạo file `.env.development` và `.env.production` trong máy local (xem phần Setup Local Environment ở trên)
 
+2. Đảm bảo đã tạo file `.env.development` trong máy local (xem phần Setup ở trên)
+
 2. Push code lên Git:
    ```bash
    git add .
@@ -47,9 +47,7 @@ VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
    git push
    ```
 
-   > 🔒 **An toàn:** File `.env.*` không được push lên Git (đã có trong `.gitignore`)
-
-3. Vercel sẽ tự động build lại, hoặc bạn có thể:
+   > 🔒 **An toàn:** File `.env*` không được push lên Git (pattern `.env*`
    - Vào **Deployments** tab
    - Click vào deployment mới nhất
    - Click **⋯** menu → **Redeploy**
@@ -85,19 +83,18 @@ app.add_middleware(
 5. Nếu thấy CORS error → Sửa backend
 6. Nếu thấy 404 → Check lại environment variable trên Vercel
 
-## 📂 File Structure⚠️ KHÔNG commit (local only)
-├── .env.production      # ⚠️ KHÔNG commit (local only)
-├── .env.example         # ✅ Template - được commit
-├── .gitignore           # Đã config ignore các file .env.*
+## 📂 File Structure
+
+```
 FE_CNW/
-├── .env.development     # Dev: /api/v1 (với Vite proxy)
-├── .env.production      # Prod: http://131.153.239.187:8345/api/v1
-├── .env.example         # Template
+├── .env.development     # ⚠️ KHÔNG commit - tự tạo local
+├── .env.production      # ⚠️ KHÔNG commit - tự tạo local  
+├── .gitignore           # Pattern: .env* (ignore tất cả)
 ├── src/
 │   ├── vite-env.d.ts   # TypeScript types cho env
 │   └── lib/
-│       └── api.ts      # Đã update để dùng env variable
-└── vite.config.ts      # Có proxy config cho dev
+│       └── api.ts      # Đọc env variable
+└── vite.config.ts      # Proxy config cho dev
 ```
 
 ## ❓ Troubleshooting
