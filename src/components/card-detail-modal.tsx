@@ -19,6 +19,7 @@ import { useTaskDetail } from "../hooks/useTaskDetail";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from 'date-fns/locale';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface CardDetailModalProps {
   task: any | null; // Chỉ cần ID từ đây là đủ
@@ -35,6 +36,8 @@ export function CardDetailModal({
   onUpdate,
   onDelete,
 }: CardDetailModalProps) {
+  
+  const queryClient = useQueryClient();
   
   // Use React Query hook
   const {
@@ -53,6 +56,9 @@ export function CardDetailModal({
     isDeletingTask,
   } = useTaskDetail(task?.id || task?._id || null);
   
+  // Flag để ngăn useEffect reset temp states khi React Query refetch
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
   // Local edit states
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -62,6 +68,10 @@ export function CardDetailModal({
   const [tempAssignees, setTempAssignees] = useState<string[]>([]);
   const [tempLabels, setTempLabels] = useState<string[]>([]);
   
+  // Lưu giá trị ban đầu để reset khi đóng không lưu
+  const [initialAssignees, setInitialAssignees] = useState<string[]>([]);
+  const [initialLabels, setInitialLabels] = useState<string[]>([]);
+  
   // Context Data
   const [projectMembers, setProjectMembers] = useState<any[]>([]);
   const [projectLabels, setProjectLabels] = useState<Label[]>([]);
@@ -69,21 +79,30 @@ export function CardDetailModal({
   // UI States
   const [newComment, setNewComment] = useState("");
   const [newChecklistText, setNewChecklistText] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   
   // Dropdowns
   const [showMemberSelect, setShowMemberSelect] = useState(false);
   const [showLabelSelect, setShowLabelSelect] = useState(false);
 
-  // Sync fullTaskData to local form
+  // Sync fullTaskData to local form - CHỈ MỘT LẦN khi mới mở modal
   useEffect(() => {
-    if (fullTaskData) {
+    if (fullTaskData && !hasInitialized) {
       setTitle(fullTaskData.title);
       setDescription(fullTaskData.description || "");
       setDueDate(fullTaskData.dueDate ? fullTaskData.dueDate.split('T')[0] : "");
-      setTempAssignees(fullTaskData.assignees || []);
-      setTempLabels(fullTaskData.labels || []);
+      
+      const assignees = fullTaskData.assignees || [];
+      const labels = fullTaskData.labels || [];
+      
+      setTempAssignees(assignees);
+      setTempLabels(labels);
+      setInitialAssignees(assignees);
+      setInitialLabels(labels);
+      
+      setHasInitialized(true);
     }
-  }, [fullTaskData]);
+  }, [fullTaskData, hasInitialized]);
 
   // Load project context data (labels & members)
   useEffect(() => {
@@ -110,6 +129,8 @@ export function CardDetailModal({
   const handleSave = async () => {
     if (!fullTaskData) return;
     
+    setIsSaving(true);
+    
     try {
       // 1. Cập nhật title, description, dueDate
       await updateTask(
@@ -117,30 +138,77 @@ export function CardDetailModal({
         { onError: () => toast.error("Lỗi lưu thông tin task") }
       );
       
-      // 2. Cập nhật assignees (thêm/xóa)
+      // 2. Xử lý Assignees - so sánh tempAssignees với dữ liệu hiện tại từ server
       const currentAssignees = fullTaskData.assignees || [];
-      const toAdd = tempAssignees.filter(id => !currentAssignees.includes(id));
-      const toRemove = currentAssignees.filter(id => !tempAssignees.includes(id));
+      const toAddAssignees = tempAssignees.filter(id => !currentAssignees.includes(id));
+      const toRemoveAssignees = currentAssignees.filter(id => !tempAssignees.includes(id));
       
-      for (const userId of toAdd) {
-        await addAssignee(userId, { onError: () => toast.error(`Lỗi thêm thành viên`) });
-      }
-      for (const userId of toRemove) {
-        await removeAssignee(userId, { onError: () => toast.error(`Lỗi xóa thành viên`) });
+      // Thêm assignees mới
+      for (const userId of toAddAssignees) {
+        try {
+          await taskApi.addAssignee(fullTaskData.id, userId);
+        } catch (error) {
+          console.error(`Lỗi thêm thành viên ${userId}:`, error);
+          toast.error(`Lỗi thêm thành viên`);
+        }
       }
       
-      // 3. Cập nhật labels (PATCH toàn bộ list thay vì thêm/xóa riêng lẻ vì backend không hỗ trợ DELETE)
+      // Xóa assignees cũ
+      for (const userId of toRemoveAssignees) {
+        try {
+          await taskApi.removeAssignee(fullTaskData.id, userId);
+        } catch (error) {
+          console.error(`Lỗi xóa thành viên ${userId}:`, error);
+          toast.error(`Lỗi xóa thành viên`);
+        }
+      }
+      
+      // 3. Xử lý Labels - so sánh tempLabels với dữ liệu hiện tại từ server
       const currentLabels = fullTaskData.labels || [];
-      if (JSON.stringify(currentLabels.sort()) !== JSON.stringify(tempLabels.sort())) {
-        // Chỉ cập nhật nếu có thay đổi
-        await taskApi.updateLabels(fullTaskData.id, tempLabels).catch(() => toast.error(`Lỗi cập nhật nhãn`));
+      const toAddLabels = tempLabels.filter(id => !currentLabels.includes(id));
+      const toRemoveLabels = currentLabels.filter(id => !tempLabels.includes(id));
+      
+      // Thêm labels mới
+      for (const labelId of toAddLabels) {
+        try {
+          await taskApi.addLabel(fullTaskData.id, labelId);
+        } catch (error) {
+          console.error(`Lỗi thêm label ${labelId}:`, error);
+          toast.error(`Lỗi thêm nhãn`);
+        }
+      }
+      
+      // Xóa labels cũ (sử dụng DELETE với body là array)
+      if (toRemoveLabels.length > 0) {
+        try {
+          await taskApi.removeLabels(fullTaskData.id, toRemoveLabels);
+        } catch (error) {
+          console.error(`Lỗi xóa labels:`, error);
+          toast.error(`Lỗi xóa nhãn`);
+        }
       }
       
       toast.success("Đã lưu tất cả thay đổi");
-      onUpdate({ ...task, title, description, dueDate });
+      
+      // Cập nhật initial values sau khi lưu thành công
+      setInitialAssignees(tempAssignees);
+      setInitialLabels(tempLabels);
+      
+      // Invalidate React Query cache để refetch data mới
+      await queryClient.invalidateQueries({ queryKey: ['task', fullTaskData.id] });
+      await queryClient.invalidateQueries({ queryKey: ['project-board', fullTaskData.projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['my-tasks'] }); // Refetch My Tasks view
+      
+      // Đợi refetch hoàn tất trước khi đóng modal (tăng lên 500ms để đảm bảo)
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // KHÔNG gọi onUpdate với data ID - để board tự refetch với full objects
       onClose();
     } catch (error) {
+      console.error("Save error:", error);
       toast.error("Có lỗi xảy ra khi lưu");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -209,6 +277,16 @@ export function CardDetailModal({
     });
   };
 
+  // Reset về giá trị ban đầu khi đóng mà không lưu
+  const handleClose = () => {
+    setTempAssignees(initialAssignees);
+    setTempLabels(initialLabels);
+    setShowMemberSelect(false);
+    setShowLabelSelect(false);
+    setHasInitialized(false); // Reset flag để lần sau mở lại sync được
+    onClose();
+  };
+
   // Memoize computed values
   const checklist = useMemo(() => fullTaskData?.checklists || [], [fullTaskData]);
   const comments = useMemo(() => fullTaskData?.comments || [], [fullTaskData]);
@@ -220,7 +298,7 @@ export function CardDetailModal({
   if (!task) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-white">
         <DialogHeader className="absolute opacity-0 pointer-events-none h-0 overflow-hidden">
           <DialogTitle>{title || "Chi tiết công việc"}</DialogTitle>
@@ -228,7 +306,7 @@ export function CardDetailModal({
         </DialogHeader>
 
         <div className="h-24 bg-gradient-to-r from-blue-600 to-indigo-600 w-full relative">
-           <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-white hover:bg-white/20" onClick={onClose}>
+           <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-white hover:bg-white/20" onClick={handleClose}>
              <X className="w-5 h-5"/>
            </Button>
         </div>
@@ -430,8 +508,9 @@ export function CardDetailModal({
              </div>
 
              <div className="border-t pt-4 mt-2 space-y-2">
-                <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700" disabled={isUpdating}>
-                   {isUpdating ? <Loader2 className="animate-spin mr-2 w-4 h-4"/> : <Save className="w-4 h-4 mr-2"/>} Lưu
+                <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700" disabled={isSaving || isUpdating}>
+                   {isSaving || isUpdating ? <Loader2 className="animate-spin mr-2 w-4 h-4"/> : <Save className="w-4 h-4 mr-2"/>} 
+                   {isSaving || isUpdating ? "Đang lưu..." : "Lưu"}
                 </Button>
                 <Button onClick={handleDelete} variant="ghost" className="w-full text-red-600 hover:bg-red-50" disabled={isDeletingTask}>
                    <Trash2 className="w-4 h-4 mr-2"/> {isDeletingTask ? "Đang xóa..." : "Xóa thẻ"}

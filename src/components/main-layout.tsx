@@ -20,6 +20,7 @@ import {
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
 import { GlobalSearch } from './global-search';
+import { useAuth } from '../context/auth-context';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -37,6 +38,15 @@ export function MainLayout({
   onOpenProject,
 }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
+  
+  // Tạo chữ cái viết tắt từ tên user
+  const getUserInitials = () => {
+    if (!user?.name) return 'U';
+    const names = user.name.trim().split(' ');
+    if (names.length === 1) return names[0].charAt(0).toUpperCase();
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+  };
 
   const handleNavigateToProject = (projectId: string, projectName: string) => {
     if (onOpenProject) {
@@ -143,14 +153,14 @@ export function MainLayout({
               <DropdownMenuTrigger asChild>
                 <button className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors">
                   <Avatar className="w-10 h-10">
-                    <AvatarImage src="" alt="User" />
+                    <AvatarImage src={user?.avatarUrl || ''} alt={user?.name || 'User'} />
                     <AvatarFallback className="bg-blue-600 text-white">
-                      JD
+                      {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
-                    <p className="text-slate-900">John Doe</p>
-                    <p className="text-slate-500">john@example.com</p>
+                    <p className="text-sm font-medium text-slate-900">{user?.name || 'User'}</p>
+                    <p className="text-xs text-slate-500 truncate">{user?.email || ''}</p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
@@ -201,9 +211,9 @@ export function MainLayout({
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2">
                     <Avatar className="w-8 h-8">
-                      <AvatarImage src="" alt="User" />
+                      <AvatarImage src={user?.avatarUrl || ''} alt={user?.name || 'User'} />
                       <AvatarFallback className="bg-blue-600 text-white">
-                        JD
+                        {getUserInitials()}
                       </AvatarFallback>
                     </Avatar>
                   </button>

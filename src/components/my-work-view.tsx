@@ -33,11 +33,13 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
   const filters = useMemo(() => {
     const f: any = {};
     if (selectedProjectId !== 'all') f.projectId = selectedProjectId;
-    if (selectedFilter === 'overdue') f.overdue = true;
-    if (selectedFilter === 'this-week') f.thisWeek = true;
-    if (selectedFilter === 'no-due-date') f.noDueDate = true;
+    // KHÔNG gửi filter overdue/thisWeek/noDueDate cho backend nữa
+    // Sẽ filter ở client-side vì backend có thể không xử lý đúng
+    // if (selectedFilter === 'overdue') f.overdue = true;
+    // if (selectedFilter === 'this-week') f.thisWeek = true;
+    // if (selectedFilter === 'no-due-date') f.noDueDate = true;
     return f;
-  }, [selectedProjectId, selectedFilter]);
+  }, [selectedProjectId]);
 
   const { data: tasks = [], isLoading } = useMyTasks(filters);
 
@@ -56,6 +58,7 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
         groups.noDueDate.push(task);
       } else {
         const dueDate = new Date(task.dueDate);
+        
         if (isPast(dueDate) && !isToday(dueDate)) {
           groups.overdue.push(task);
         } else if (isToday(dueDate)) {
@@ -77,6 +80,22 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
     thisWeek: groupedTasks.thisWeek.length,
     noDueDate: groupedTasks.noDueDate.length,
   }), [tasks, groupedTasks]);
+
+  // Filter tasks theo selectedFilter cho hiển thị
+  const displayedGroups = useMemo(() => {
+    if (selectedFilter === 'all') {
+      return groupedTasks;
+    }
+    
+    // Chỉ hiển thị group tương ứng với filter
+    return {
+      overdue: selectedFilter === 'overdue' ? groupedTasks.overdue : [],
+      today: selectedFilter === 'all' ? groupedTasks.today : [],
+      thisWeek: selectedFilter === 'this-week' ? groupedTasks.thisWeek : [],
+      later: selectedFilter === 'all' ? groupedTasks.later : [],
+      noDueDate: selectedFilter === 'no-due-date' ? groupedTasks.noDueDate : [],
+    };
+  }, [selectedFilter, groupedTasks]);
 
   const handleTaskClick = (task: typeof tasks[0]) => {
     setSelectedTask(task);
@@ -168,14 +187,14 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
         {viewMode === 'list' ? (
           <div className="space-y-8">
             {/* Overdue Section */}
-            {groupedTasks.overdue.length > 0 && (
+            {displayedGroups.overdue.length > 0 && (
               <TaskSection
                 title="Overdue"
-                count={groupedTasks.overdue.length}
+                count={displayedGroups.overdue.length}
                 icon={<AlertCircle className="w-5 h-5 text-red-600" />}
                 variant="danger"
               >
-                {groupedTasks.overdue.map((task) => (
+                {displayedGroups.overdue.map((task) => (
                   <TaskItem
                     key={task.id}
                     task={task}
@@ -187,13 +206,13 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
             )}
 
             {/* This Week Section */}
-            {groupedTasks.thisWeek.length > 0 && (
+            {displayedGroups.thisWeek.length > 0 && (
               <TaskSection
                 title="Due This Week"
-                count={groupedTasks.thisWeek.length}
+                count={displayedGroups.thisWeek.length}
                 icon={<Calendar className="w-5 h-5 text-slate-600" />}
               >
-                {groupedTasks.thisWeek.map((task) => (
+                {displayedGroups.thisWeek.map((task) => (
                   <TaskItem
                     key={task.id}
                     task={task}
@@ -205,13 +224,13 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
             )}
 
             {/* Later Section */}
-            {groupedTasks.later.length > 0 && (
+            {displayedGroups.later.length > 0 && (
               <TaskSection
                 title="Later"
-                count={groupedTasks.later.length}
+                count={displayedGroups.later.length}
                 icon={<Clock className="w-5 h-5 text-slate-600" />}
               >
-                {groupedTasks.later.map((task) => (
+                {displayedGroups.later.map((task) => (
                   <TaskItem
                     key={task.id}
                     task={task}
@@ -223,13 +242,13 @@ export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
             )}
 
             {/* No Due Date Section */}
-            {groupedTasks.noDueDate.length > 0 && (
+            {displayedGroups.noDueDate.length > 0 && (
               <TaskSection
                 title="No Due Date"
-                count={groupedTasks.noDueDate.length}
+                count={displayedGroups.noDueDate.length}
                 icon={<Tag className="w-5 h-5 text-slate-400" />}
               >
-                {groupedTasks.noDueDate.map((task) => (
+                {displayedGroups.noDueDate.map((task) => (
                   <TaskItem
                     key={task.id}
                     task={task}

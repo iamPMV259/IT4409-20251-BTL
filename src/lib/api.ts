@@ -366,14 +366,9 @@ export const taskApi = {
   addLabel: (taskId: string, labelId: string) =>
     api.post(`/tasks/${taskId}/labels`, { labelId }),
     
-  // Xóa Label khỏi Task
-  removeLabel: (taskId: string, labelId: string) =>
-    api.delete(`/tasks/${taskId}/labels/${labelId}`),
-    
-  // Xóa Label khỏi Task (Dùng PATCH update list ID nếu không có API Delete riêng)
-  // Workaround: Gửi PATCH update toàn bộ list labels
-  updateLabels: (taskId: string, labelIds: string[]) =>
-    api.patch(`/tasks/${taskId}`, { labels: labelIds }),
+  // Xóa nhiều Labels khỏi Task (DELETE với body là array UUID)
+  removeLabels: (taskId: string, labelIds: string[]) =>
+    api.delete(`/tasks/${taskId}/labels`, { data: labelIds }),
 
   // Thêm người vào Task
   addAssignee: (taskId: string, userId: string) =>

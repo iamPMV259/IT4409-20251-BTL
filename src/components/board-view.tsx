@@ -216,7 +216,7 @@ export function BoardView({
   useEffect(() => {
     if (board) {
       setProjectTitle(board.project.name);
-
+      
       const formattedColumns: UIColumn[] = board.columns.map((col) => ({
         id: col.id,
         title: col.title,
