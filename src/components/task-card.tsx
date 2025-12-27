@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
 import {
@@ -9,7 +9,7 @@ import {
   AlignLeft,
 } from 'lucide-react';
 import { useDrag } from 'react-dnd';
-import { Task, TaskAssignee, TaskLabel } from '../lib/api';
+import { Task, TaskAssignee, TaskLabel, userApi } from '../lib/api';
 
 // Re-export Task để các file khác có thể import từ đây
 export type { Task };
@@ -20,11 +20,13 @@ interface TaskCardProps {
 }
 
 // Helper để lấy assignees dạng object
+// Simple cache for user names
+const nameCache = new Map<string, string>();
+
 const getAssignees = (assignees: TaskAssignee[] | string[]): TaskAssignee[] => {
   if (!assignees || assignees.length === 0) return [];
   if (typeof assignees[0] === 'string') {
-    // Nếu là string[], convert sang object với tên mặc định
-    return (assignees as string[]).map(id => ({ id, name: id.slice(0, 8), avatar: '' }));
+    return (assignees as string[]).map(id => ({ id, name: nameCache.get(id) || id.slice(0,8), avatar: '' }));
   }
   return assignees as TaskAssignee[];
 };
@@ -55,7 +57,34 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
 
   // Chuyển đổi sang format UI
   const displayLabels = getLabels(task.labels);
-  const displayAssignees = getAssignees(task.assignees);
+  const [displayAssignees, setDisplayAssignees] = useState<TaskAssignee[]>(() => getAssignees(task.assignees));
+
+  useEffect(() => {
+    let mounted = true;
+    if (!task.assignees || (task.assignees as any[]).length === 0) {
+      setDisplayAssignees([]);
+      return;
+    }
+
+    if (typeof (task.assignees as any[])[0] !== 'string') {
+      setDisplayAssignees(task.assignees as TaskAssignee[]);
+      return;
+    }
+
+    const ids = task.assignees as string[];
+    const unresolved = ids.filter(id => !nameCache.has(id));
+    if (unresolved.length === 0) {
+      setDisplayAssignees(ids.map(id => ({ id, name: nameCache.get(id) || id.slice(0,8), avatar: '' })));
+      return;
+    }
+
+    Promise.all(unresolved.map(id => userApi.get(id).then(r => { nameCache.set(id, r.data.name || id.slice(0,8)); }).catch(() => { nameCache.set(id, id.slice(0,8)); }))).then(() => {
+      if (!mounted) return;
+      setDisplayAssignees(ids.map(id => ({ id, name: nameCache.get(id) || id.slice(0,8), avatar: '' })));
+    });
+
+    return () => { mounted = false; };
+  }, [task.assignees]);
 
   return (
     <div

@@ -234,6 +234,27 @@ export const taskApi = {
   // POST /api/v1/tasks/{task_id}/labels
   addLabel: (taskId: string, labelId: string) => 
     api.post<Task>(`/tasks/${taskId}/labels`, { labelId }),
+  // Checklist item endpoints
+  // Note: DELETE uses item_text as identifier in the URL path
+  addChecklistItem: (taskId: string, payload: { text: string; checked?: boolean }) =>
+    api.post(`/tasks/${taskId}/checklist-items`, payload),
+  updateChecklistItem: (taskId: string, itemId: string, payload: { text?: string; checked?: boolean }) =>
+    api.patch(`/tasks/${taskId}/checklist-items/${itemId}`, payload),
+  deleteChecklistItem: (taskId: string, itemText: string) =>
+    api.delete(`/tasks/${taskId}/checklist-items/${encodeURIComponent(itemText)}`),
+  // GET /api/v1/me/tasks - Get tasks assigned to current user with optional filters
+  getMyTasks: (params?: {
+    project_id?: string;
+    label_id?: string;
+    no_due_date?: boolean;
+    overdue?: boolean;
+    this_week?: boolean;
+  }) => api.get<Task[]>('/me/tasks', { params }),
 };
 
 export default api;
+
+// Simple User API helper - fetch user by id
+export const userApi = {
+  get: (userId: string) => api.get<User>(`/users/${userId}`),
+};

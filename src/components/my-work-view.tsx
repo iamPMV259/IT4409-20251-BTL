@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   List,
   Calendar as CalendarIcon,
@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import { taskApi, Task as ApiTask } from '../lib/api';
 
 type ViewMode = 'list' | 'calendar';
 type QuickFilter = 'all' | 'overdue' | 'this-week' | 'no-due-date';
@@ -43,161 +44,15 @@ interface MyTask extends Task {
   estimate?: number;
 }
 
-// Mock data - tasks assigned to the current user
-const MOCK_MY_TASKS: MyTask[] = [
-  {
-    id: '1',
-    title: 'Design homepage wireframes',
-    description: 'Create low-fidelity wireframes for the homepage',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-25',
-    labels: [{ color: 'bg-purple-500', name: 'Design' }],
-    checklist: { total: 5, completed: 2 },
-    comments: 3,
-    attachments: 1,
-    projectId: '1',
-    projectName: 'Website Redesign',
-    projectColor: 'bg-blue-500',
-    status: 'To Do',
-    estimate: 8,
-  },
-  {
-    id: '2',
-    title: 'Implement user authentication',
-    description: 'Add login and signup functionality',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-22',
-    labels: [
-      { color: 'bg-blue-500', name: 'Development' },
-      { color: 'bg-orange-500', name: 'Urgent' },
-    ],
-    checklist: { total: 3, completed: 1 },
-    comments: 5,
-    attachments: 2,
-    projectId: '1',
-    projectName: 'Website Redesign',
-    projectColor: 'bg-blue-500',
-    status: 'In Progress',
-    estimate: 13,
-  },
-  {
-    id: '3',
-    title: 'Review pull request #234',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-24',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-    comments: 2,
-    attachments: 0,
-    projectId: '2',
-    projectName: 'Mobile App Development',
-    projectColor: 'bg-purple-500',
-    status: 'Review',
-    estimate: 3,
-  },
-  {
-    id: '4',
-    title: 'Update API documentation',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-28',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-    comments: 1,
-    attachments: 0,
-    projectId: '2',
-    projectName: 'Mobile App Development',
-    projectColor: 'bg-purple-500',
-    status: 'To Do',
-    estimate: 5,
-  },
-  {
-    id: '5',
-    title: 'Prepare client presentation',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-30',
-    labels: [{ color: 'bg-green-500', name: 'Feature' }],
-    comments: 3,
-    attachments: 2,
-    projectId: '3',
-    projectName: 'Marketing Campaign',
-    projectColor: 'bg-green-500',
-    status: 'In Progress',
-  },
-  {
-    id: '6',
-    title: 'Fix critical bug in checkout',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-23',
-    labels: [{ color: 'bg-red-500', name: 'Critical' }],
-    comments: 8,
-    attachments: 1,
-    projectId: '1',
-    projectName: 'Website Redesign',
-    projectColor: 'bg-blue-500',
-    status: 'In Progress',
-    estimate: 5,
-  },
-  {
-    id: '7',
-    title: 'Research new design trends',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    labels: [{ color: 'bg-purple-500', name: 'Design' }],
-    comments: 0,
-    attachments: 0,
-    projectId: '3',
-    projectName: 'Marketing Campaign',
-    projectColor: 'bg-green-500',
-    status: 'To Do',
-  },
-  {
-    id: '8',
-    title: 'Write unit tests',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-27',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-    comments: 2,
-    attachments: 0,
-    projectId: '1',
-    projectName: 'Website Redesign',
-    projectColor: 'bg-blue-500',
-    status: 'To Do',
-    estimate: 8,
-  },
-  {
-    id: '9',
-    title: 'Design system audit',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-26',
-    labels: [{ color: 'bg-purple-500', name: 'Design' }],
-    comments: 1,
-    attachments: 3,
-    projectId: '3',
-    projectName: 'Marketing Campaign',
-    projectColor: 'bg-green-500',
-    status: 'In Progress',
-    estimate: 5,
-  },
-  {
-    id: '10',
-    title: 'Update dependencies',
-    assignees: [{ name: 'John Doe', avatar: '' }],
-    dueDate: '2025-10-29',
-    labels: [{ color: 'bg-blue-500', name: 'Development' }],
-    comments: 0,
-    attachments: 0,
-    projectId: '2',
-    projectName: 'Mobile App Development',
-    projectColor: 'bg-purple-500',
-    status: 'To Do',
-  },
-];
-
 export function MyWorkView() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [tasks, setTasks] = useState<MyTask[]>(MOCK_MY_TASKS);
+  const [tasks, setTasks] = useState<MyTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MyTask | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   // Calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -343,6 +198,68 @@ export function MyWorkView() {
 
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  // Convert API Task to UI MyTask
+  const convertApiTask = (t: ApiTask): MyTask => {
+    const assignees = (t.assignees || []).map(a =>
+      typeof a === 'string' ? { name: a } : { id: (a as any).id, name: (a as any).name, avatar: (a as any).avatar }
+    );
+
+    const labels = (t.labels || []).map(l =>
+      typeof l === 'string' ? { name: l, color: 'bg-slate-400' } : { id: (l as any).id, name: (l as any).name, color: (l as any).color || 'bg-slate-400' }
+    );
+
+    const projectId = (t as any).projectId || (t as any).project_id || '';
+    const projectName = (t as any).projectName || (t as any).project_name || '';
+    const projectColor = (t as any).projectColor || (t as any).project_color || 'bg-slate-500';
+
+    const checklist = (t as any).checklist || { total: (t as any).checklists?.length || 0, completed: 0 };
+
+    return {
+      id: t.id,
+      title: t.title,
+      description: t.description || '',
+      assignees,
+      dueDate: (t as any).dueDate || (t as any).due_date,
+      labels,
+      checklist,
+      comments: t.comments || 0,
+      attachments: t.attachments || 0,
+      projectId,
+      projectName,
+      projectColor,
+      status: (t as any).status || 'To Do',
+      estimate: (t as any).estimate,
+    } as MyTask;
+  };
+
+  // Fetch tasks from API when filters change
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTasks = async () => {
+      setLoading(true);
+      try {
+        const params: any = {};
+        if (selectedProject !== 'all') params.project_id = selectedProject;
+        if (selectedLabels.length > 0) params.label_id = selectedLabels[0];
+        if (quickFilter === 'overdue') params.overdue = true;
+        if (quickFilter === 'this-week') params.this_week = true;
+        if (quickFilter === 'no-due-date') params.no_due_date = true;
+
+        const res = await taskApi.getMyTasks(params);
+        if (!isMounted) return;
+        const data = res.data || [];
+        setTasks(data.map(convertApiTask));
+      } catch (err) {
+        console.error('Failed to fetch my tasks', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchTasks();
+    return () => { isMounted = false; };
+  }, [selectedProject, selectedLabels, quickFilter]);
 
   // Calendar functions
   const getDaysInMonth = (date: Date) => {

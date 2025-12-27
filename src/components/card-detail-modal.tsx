@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ import {
   Plus,
   Send,
 } from "lucide-react";
-import { taskApi, Task } from "../lib/api"; // Import api
+import { taskApi, Task, TaskAssignee, userApi } from "../lib/api"; // Import api
 import { toast } from "sonner";
 import { Calendar as CalendarComponent } from "./ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -67,13 +67,13 @@ export function CardDetailModal({
   const [editedTask, setEditedTask] = useState<Task | null>(task);
   const [newComment, setNewComment] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
-  const [checklistItems, setChecklistItems] = useState([
-    { id: "1", text: "Research competitors", completed: true },
-    { id: "2", text: "Create wireframes", completed: true },
-    { id: "3", text: "Design mockups", completed: false },
-    { id: "4", text: "Get stakeholder approval", completed: false },
-    { id: "5", text: "Hand off to development", completed: false },
-  ]);
+  const [isAddingChecklist, setIsAddingChecklist] = useState(false);
+  const [isRemovingChecklist, setIsRemovingChecklist] = useState<Set<string>>(new Set());
+  const [lastAdded, setLastAdded] = useState<{ text: string; ts: number } | null>(null);
+  // checklist items local state: items may have serverId (from API) or only tempId (new local items)
+  const [checklistItems, setChecklistItems] = useState<Array<{ tempId: string; serverId?: string; text: string; completed: boolean }>>([]);
+  // snapshot of original server-side checklist items to detect deletions/changes
+  const [originalChecklistItems, setOriginalChecklistItems] = useState<Array<{ id: string; text: string; checked: boolean }>>([]);
 
   const [comments] = useState([
     {
@@ -115,7 +115,98 @@ export function CardDetailModal({
 
   React.useEffect(() => {
     setEditedTask(task);
+    // Reset checklist items when task is cleared
+    if (!task) {
+      setChecklistItems([]);
+      setOriginalChecklistItems([]);
+      setNewChecklistItem("");
+    }
   }, [task]);
+
+  // When modal opens, fetch fresh task details from API to ensure we have full assignee info
+  useEffect(() => {
+    let mounted = true;
+    const loadDetail = async () => {
+      if (!task) return;
+      try {
+        const { data } = await taskApi.getDetail(task.id);
+        if (!mounted) return;
+        setEditedTask(data);
+        
+        // Load checklist items from API response
+        const raw = (data as any).checklists || (data as any).checklistItems || [];
+        if (Array.isArray(raw)) {
+          // Remove duplicates by id and text before mapping
+          const uniqueItems = raw.filter((c: any, index: number, self: any[]) => 
+            index === self.findIndex((item: any) => 
+              (item.id && c.id && item.id === c.id) || 
+              (!item.id && !c.id && (item.text || item.name || '').trim().toLowerCase() === (c.text || c.name || '').trim().toLowerCase())
+            )
+          );
+          
+          // Use unique tempId based on serverId to avoid duplicates
+          const mapped = uniqueItems.map((c: any, idx: number) => ({ 
+            tempId: c.id ? `server_${c.id}` : `${Date.now()}_${idx}_${Math.random().toString(36).slice(2,9)}`, 
+            serverId: c.id, 
+            text: c.text || c.name || '', 
+            completed: !!c.checked || !!c.completed 
+          }));
+          setChecklistItems(mapped);
+          setOriginalChecklistItems(uniqueItems.map((c: any) => ({ 
+            id: c.id, 
+            text: c.text || c.name || '', 
+            checked: !!c.checked || !!c.completed 
+          })));
+        } else {
+          setChecklistItems([]);
+          setOriginalChecklistItems([]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch task detail', err);
+      }
+    };
+
+    loadDetail();
+    return () => { mounted = false; };
+  }, [task]);
+
+  // Simple cache for resolved user names
+  const userNameCache = new Map<string, string>();
+  const [displayAssignees, setDisplayAssignees] = useState<TaskAssignee[]>([]);
+
+  const extractIds = (arr: any[] | undefined) => (arr || []).map(a => (typeof a === 'string' ? a : a.id));
+
+  // Resolve assignee names (support string[] or TaskAssignee[])
+  useEffect(() => {
+    let mounted = true;
+    const raw = editedTask?.assignees || [];
+    if (raw.length === 0) {
+      setDisplayAssignees([]);
+      return;
+    }
+
+    // If already objects, use them
+    if (typeof raw[0] !== 'string') {
+      setDisplayAssignees(raw as TaskAssignee[]);
+      return;
+    }
+
+    const ids = raw as string[];
+    const unresolved = ids.filter(id => !userNameCache.has(id));
+
+    if (unresolved.length === 0) {
+      setDisplayAssignees(ids.map(id => ({ id, name: userNameCache.get(id) || id.slice(0,8), avatar: '' })));
+      return;
+    }
+
+    Promise.all(unresolved.map(id => userApi.get(id).then(r => { userNameCache.set(id, r.data.name || id.slice(0,8)); }).catch(() => { userNameCache.set(id, id.slice(0,8)); })))
+      .then(() => {
+        if (!mounted) return;
+        setDisplayAssignees(ids.map(id => ({ id, name: userNameCache.get(id) || id.slice(0,8), avatar: '' })));
+      });
+
+    return () => { mounted = false; };
+  }, [editedTask?.assignees]);
 
   // --- LOGIC ASSIGNEES ---
   // Helper: Lấy thông tin user từ ID
@@ -126,23 +217,22 @@ export function CardDetailModal({
     };
 
   const handleToggleAssignee = async (userId: string) => {
-    const isAssigned = editedTask.assignees.includes(userId);
+    if (!editedTask) return;
+    const currentIds = extractIds(editedTask.assignees as any[]);
+    const isAssigned = currentIds.includes(userId);
 
     try {
       let updatedTaskData;
       if (isAssigned) {
-        // Gọi API Xóa
         const { data } = await taskApi.removeAssignee(editedTask.id, userId);
         updatedTaskData = data;
         toast.success("Đã xóa thành viên");
       } else {
-        // Gọi API Thêm
         const { data } = await taskApi.addAssignee(editedTask.id, userId);
         updatedTaskData = data;
         toast.success("Đã thêm thành viên");
       }
 
-      // Cập nhật state local & parent
       setEditedTask(updatedTaskData);
       onUpdate(updatedTaskData);
     } catch (error) {
@@ -174,16 +264,123 @@ export function CardDetailModal({
   };
 
   const handleSave = () => {
-    if (!editedTask) return;
-    onUpdate(editedTask); // Gọi hàm update ở BoardView
-    onClose();
+    // Save via API: sync checklist items then update task
+    const save = async () => {
+      if (!editedTask) return;
+      try {
+        // Determine items to create/update/delete
+        const toCreate = checklistItems.filter(ci => !ci.serverId);
+        const toKeep = checklistItems.filter(ci => !!ci.serverId);
+        const currentServerIds = toKeep.map(ci => ci.serverId!);
+        const toDelete = originalChecklistItems.filter(orig => !currentServerIds.includes(orig.id));
+
+        // Create - avoid duplicates by checking text
+        const createdTexts = new Set<string>();
+        for (const ci of toCreate) {
+          // Skip if text already exists (case-insensitive)
+          const textLower = ci.text.trim().toLowerCase();
+          if (createdTexts.has(textLower)) {
+            console.warn('Skipping duplicate checklist item:', ci.text);
+            continue;
+          }
+          createdTexts.add(textLower);
+          
+          try {
+            await taskApi.addChecklistItem(editedTask.id, { text: ci.text, checked: ci.completed });
+          } catch (e) {
+            console.warn('create checklist item failed', e);
+          }
+        }
+
+        // Update
+        for (const ci of toKeep) {
+          const orig = originalChecklistItems.find(o => o.id === ci.serverId);
+          if (!orig) continue;
+          if (orig.text !== ci.text || !!orig.checked !== !!ci.completed) {
+            try {
+              await taskApi.updateChecklistItem(editedTask.id, ci.serverId!, { text: ci.text, checked: ci.completed });
+            } catch (e) {
+              console.warn('update checklist item failed', e);
+            }
+          }
+        }
+
+        // Delete - only delete items that are in originalChecklistItems but not in current checklistItems
+        // Note: Items that were already deleted via removeChecklistItem are already removed from originalChecklistItems
+        // API uses item_text (text) as identifier, not ID
+        for (const d of toDelete) {
+          try {
+            console.log('Deleting checklist item during save:', { id: d.id, text: d.text });
+            await taskApi.deleteChecklistItem(editedTask.id, d.text);
+          } catch (e: any) {
+            // If item was already deleted (404), that's okay
+            if (e?.response?.status === 404) {
+              console.log('Item already deleted, skipping:', d.text);
+            } else {
+              console.warn('delete checklist item failed', e);
+            }
+          }
+        }
+
+        // Update main task fields
+        const payload: any = {
+          title: editedTask.title,
+          description: editedTask.description,
+          dueDate: editedTask.dueDate,
+          assignees: extractIds(editedTask.assignees as any[]),
+          labels: extractIds(editedTask.labels as any[]),
+        };
+        const { data } = await taskApi.update(editedTask.id, payload);
+
+        // Refresh details
+        try {
+          const { data: refreshed } = await taskApi.getDetail(editedTask.id);
+          setEditedTask(refreshed);
+          const raw = (refreshed as any).checklists || (refreshed as any).checklistItems || [];
+          if (Array.isArray(raw)) {
+            // Remove duplicates by id and text before mapping
+            const uniqueItems = raw.filter((c: any, index: number, self: any[]) => 
+              index === self.findIndex((item: any) => 
+                (item.id && c.id && item.id === c.id) || 
+                (!item.id && !c.id && (item.text || item.name || '').trim().toLowerCase() === (c.text || c.name || '').trim().toLowerCase())
+              )
+            );
+            
+            // Use unique tempId based on serverId to avoid duplicates
+            const mapped = uniqueItems.map((c: any, idx: number) => ({ 
+              tempId: c.id ? `server_${c.id}` : `${Date.now()}_${idx}_${Math.random().toString(36).slice(2,9)}`, 
+              serverId: c.id, 
+              text: c.text || c.name || '', 
+              completed: !!c.checked || !!c.completed 
+            }));
+            setChecklistItems(mapped);
+            setOriginalChecklistItems(uniqueItems.map((c: any) => ({ 
+              id: c.id, 
+              text: c.text || c.name || '', 
+              checked: !!c.checked || !!c.completed 
+            })));
+          }
+        } catch (e) {
+          console.warn('refresh detail failed', e);
+        }
+
+        onUpdate(data);
+        toast.success('Đã lưu thay đổi');
+        onClose();
+      } catch (err) {
+        console.error('Failed to save task', err);
+        toast.error('Lưu thất bại');
+      }
+    };
+
+    save();
   };
 
   if (!editedTask) return null;
 
   const completedItems = checklistItems.filter((item) => item.completed).length;
   const totalItems = checklistItems.length;
-  const progress = (completedItems / totalItems) * 100;
+  const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
 
   const availableLabels = [
     { name: "Design", color: "bg-purple-500" },
@@ -194,31 +391,118 @@ export function CardDetailModal({
   ];
 
   const teamMembers = [
-    { name: "John Doe", avatar: "" },
-    { name: "Jane Smith", avatar: "" },
-    { name: "Bob Wilson", avatar: "" },
-    { name: "Alice Johnson", avatar: "" },
+    // Use MOCK_PROJECT_MEMBERS (has ids) so we can call API endpoints
+    ...MOCK_PROJECT_MEMBERS,
   ];
 
-  const toggleChecklistItem = (itemId: string) => {
-    setChecklistItems(
-      checklistItems.map((item) =>
-        item.id === itemId ? { ...item, completed: !item.completed } : item
-      )
-    );
+  const toggleChecklistItem = (tempId: string) => {
+    setChecklistItems(prev => prev.map(item => item.tempId === tempId ? { ...item, completed: !item.completed } : item));
   };
 
   const addChecklistItem = () => {
-    if (newChecklistItem.trim()) {
-      setChecklistItems([
-        ...checklistItems,
-        {
-          id: Date.now().toString(),
-          text: newChecklistItem,
-          completed: false,
-        },
-      ]);
-      setNewChecklistItem("");
+    const text = newChecklistItem.trim();
+    if (!text) return;
+    
+    // Check if item already exists (case-insensitive)
+    const exists = checklistItems.some(item => 
+      item.text.trim().toLowerCase() === text.toLowerCase()
+    );
+    if (exists) {
+      toast.error('Mục này đã tồn tại trong checklist');
+      return;
+    }
+    
+    // Prevent rapid duplicate additions
+    const now = Date.now();
+    if (lastAdded && lastAdded.text.toLowerCase() === text.toLowerCase() && now - lastAdded.ts < 1000) {
+      return;
+    }
+    
+    // Prevent double-click
+    if (isAddingChecklist) return;
+    
+    setIsAddingChecklist(true);
+    const tempId = `${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+    setChecklistItems(prev => [...prev, { tempId, text, completed: false } as any]);
+    setLastAdded({ text, ts: now });
+    setNewChecklistItem("");
+    setTimeout(() => setIsAddingChecklist(false), 500);
+  };
+
+  const removeChecklistItem = async (tempId: string) => {
+    // Prevent double-click removal
+    if (isRemovingChecklist.has(tempId)) {
+      console.log('Item is already being removed:', tempId);
+      return;
+    }
+    
+    if (!editedTask) {
+      console.error('No task selected');
+      return;
+    }
+    
+    const item = checklistItems.find(c => c.tempId === tempId);
+    if (!item) {
+      console.warn('Item not found:', tempId, 'Available items:', checklistItems.map(i => i.tempId));
+      return;
+    }
+    
+    console.log('Removing checklist item:', { tempId, serverId: item.serverId, text: item.text });
+    setIsRemovingChecklist(prev => new Set(prev).add(tempId));
+    
+    // Optimistic update: remove from UI immediately
+    const previousItems = [...checklistItems];
+    
+    // Only remove from checklistItems, NOT from originalChecklistItems
+    // This allows the save logic to detect deleted items
+    setChecklistItems(prev => prev.filter(c => c.tempId !== tempId));
+    
+    try {
+      if (item.serverId) {
+        // Item exists on server, delete via API immediately using item text
+        console.log('Deleting from server:', { taskId: editedTask.id, itemText: item.text });
+        const response = await taskApi.deleteChecklistItem(editedTask.id, item.text);
+        console.log('Delete response:', response);
+        
+        // Only remove from originalChecklistItems after successful API call
+        setOriginalChecklistItems(prev => prev.filter(o => o.id !== item.serverId));
+        
+        // Refresh task to get updated checklist count
+        try {
+          const { data: refreshed } = await taskApi.getDetail(editedTask.id);
+          setEditedTask(refreshed);
+          onUpdate(refreshed);
+        } catch (refreshError) {
+          console.warn('Failed to refresh task after delete', refreshError);
+        }
+        
+        toast.success('Đã xóa mục checklist');
+      } else {
+        // Item is local only, already removed from state
+        console.log('Removing local item only');
+        toast.success('Đã xóa mục checklist');
+      }
+    } catch (e: any) {
+      // Rollback on error
+      console.error('Failed to delete checklist item', e);
+      const errorMessage = e?.response?.data?.message || e?.message || 'Xóa mục thất bại';
+      console.error('Error details:', {
+        status: e?.response?.status,
+        data: e?.response?.data,
+        message: errorMessage
+      });
+      // Rollback checklistItems
+      setChecklistItems(previousItems);
+      toast.error(`Xóa mục thất bại: ${errorMessage}`);
+    } finally {
+      // Remove from removing set after a delay
+      setTimeout(() => {
+        setIsRemovingChecklist(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(tempId);
+          return newSet;
+        });
+      }, 500);
     }
   };
 
@@ -332,26 +616,46 @@ export function CardDetailModal({
                   </div>
                   <Progress value={progress} className="mb-4" />
                   <div className="space-y-2 mb-3">
-                    {checklistItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 p-2 rounded hover:bg-slate-50"
-                      >
-                        <Checkbox
-                          checked={item.completed}
-                          onCheckedChange={() => toggleChecklistItem(item.id)}
-                        />
-                        <span
-                          className={`flex-1 ${
-                            item.completed
-                              ? "line-through text-slate-500"
-                              : "text-slate-700"
-                          }`}
+                    {checklistItems.length === 0 ? (
+                      <p className="text-slate-500 text-sm italic">Chưa có mục nào trong checklist</p>
+                    ) : (
+                      checklistItems.map((item) => (
+                        <div
+                          key={item.tempId}
+                          className="flex items-center gap-3 p-2 rounded hover:bg-slate-50 group"
                         >
-                          {item.text}
-                        </span>
-                      </div>
-                    ))}
+                          <Checkbox
+                            checked={item.completed}
+                            onCheckedChange={() => toggleChecklistItem(item.tempId)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span
+                            className={`flex-1 cursor-default ${
+                              item.completed
+                                ? "line-through text-slate-500"
+                                : "text-slate-700"
+                            }`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {item.text}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeChecklistItem(item.tempId);
+                            }}
+                            disabled={isRemovingChecklist.has(item.tempId)}
+                            className="text-slate-400 hover:text-red-600 ml-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors p-1 rounded hover:bg-red-50"
+                            aria-label="Remove checklist item"
+                            title="Xóa mục này"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Input
@@ -366,9 +670,10 @@ export function CardDetailModal({
                     />
                     <Button
                       onClick={addChecklistItem}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={isAddingChecklist}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Add
+                      {isAddingChecklist ? 'Đang thêm...' : 'Add'}
                     </Button>
                   </div>
                 </div>
@@ -489,9 +794,12 @@ export function CardDetailModal({
                               key={index}
                               className="w-full flex items-center gap-2 p-2 rounded hover:bg-slate-100"
                               onClick={() => {
-                                if (
+                                // Toggle via API if id present
+                                if ((member as any).id) {
+                                  handleToggleAssignee((member as any).id);
+                                } else if (
                                   !editedTask.assignees.find(
-                                    (a) => a.name === member.name
+                                    (a: any) => (typeof a === 'string' ? a === (member as any).id : a.name === member.name)
                                   )
                                 ) {
                                   setEditedTask({
@@ -564,33 +872,38 @@ export function CardDetailModal({
                 <div>
                   <h4 className="text-slate-900 mb-3">Assigned to</h4>
                   <div className="space-y-2">
-                    {editedTask.assignees.map((assignee, index) => (
+                    {displayAssignees.map((assignee, index) => (
                       <div
-                        key={index}
+                        key={assignee.id || index}
                         className="flex items-center justify-between p-2 rounded hover:bg-slate-50"
                       >
                         <div className="flex items-center gap-2">
                           <Avatar className="w-6 h-6">
                             <AvatarImage src={assignee.avatar} />
                             <AvatarFallback className="bg-slate-200 text-slate-700">
-                              {assignee.name
+                              {(assignee.name || assignee.id || "")
+                                .toString()
                                 .split(" ")
                                 .map((n) => n[0])
                                 .join("")}
                             </AvatarFallback>
                           </Avatar>
                           <span className="text-slate-900">
-                            {assignee.name}
+                            {assignee.name || assignee.id}
                           </span>
                         </div>
                         <button
                           onClick={() => {
-                            setEditedTask({
-                              ...editedTask,
-                              assignees: editedTask.assignees.filter(
-                                (_, i) => i !== index
-                              ),
-                            });
+                            // Call API to remove
+                            if (assignee.id) {
+                              handleToggleAssignee(assignee.id);
+                            } else {
+                              // fallback: remove locally
+                              setEditedTask({
+                                ...editedTask,
+                                assignees: (editedTask.assignees || []).filter((a: any, i: number) => i !== index),
+                              });
+                            }
                           }}
                           className="text-slate-400 hover:text-slate-600"
                         >
