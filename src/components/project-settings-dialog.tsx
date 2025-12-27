@@ -13,8 +13,8 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Trash2, Save, Loader2, AlertTriangle } from "lucide-react";
 import { projectApi } from "../lib/api";
+import { useWorkspaces } from "../hooks/useWorkspaces";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom"; // Hoặc dùng callback onBack
 
 interface ProjectSettingsDialogProps {
   projectId: string;
@@ -38,6 +38,9 @@ export function ProjectSettingsDialog({
   const [name, setName] = useState(currentTitle);
   const [description, setDescription] = useState(currentDescription);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sử dụng hook để xóa project với React Query
+  const { deleteProject, isDeletingProject } = useWorkspaces();
 
   // Reset state khi mở modal
   useEffect(() => {
@@ -70,15 +73,16 @@ export function ProjectSettingsDialog({
     )
       return;
 
-    setIsLoading(true);
-    try {
-      await projectApi.delete(projectId);
-      toast.success("Đã xóa dự án");
-      onDeleteSuccess();
-    } catch (error) {
-      toast.error("Không thể xóa (Bạn có phải Owner không?)");
-      setIsLoading(false);
-    }
+    // Sử dụng mutation từ React Query
+    deleteProject(projectId, {
+      onSuccess: () => {
+        toast.success("Đã xóa dự án");
+        onDeleteSuccess();
+      },
+      onError: () => {
+        toast.error("Không thể xóa (Bạn có phải Owner không?)");
+      },
+    });
   };
 
   return (
@@ -124,9 +128,9 @@ export function ProjectSettingsDialog({
               variant="destructive"
               size="sm"
               onClick={handleDelete}
-              disabled={isLoading}
+              disabled={isLoading || isDeletingProject}
             >
-              <Trash2 className="w-4 h-4 mr-2" /> Xóa
+              <Trash2 className="w-4 h-4 mr-2" /> {isDeletingProject ? "Đang xóa..." : "Xóa"}
             </Button>
           </div>
         </div>

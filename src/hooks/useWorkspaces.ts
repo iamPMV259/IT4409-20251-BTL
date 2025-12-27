@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workspaceApi, WorkspaceResponse, JoinedProject } from '../lib/api';
+import { workspaceApi, projectApi, WorkspaceResponse, JoinedProject } from '../lib/api';
 
 export function useWorkspaces() {
   const queryClient = useQueryClient();
@@ -60,6 +60,18 @@ export function useWorkspaces() {
     },
   });
 
+  // Delete project mutation
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      const response = await projectApi.delete(projectId);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate để reload lại danh sách projects
+      queryClient.invalidateQueries({ queryKey: ['joined-projects'] });
+    },
+  });
+
   return {
     workspaces: workspacesQuery.data,
     isLoadingWorkspaces: workspacesQuery.isLoading,
@@ -69,5 +81,7 @@ export function useWorkspaces() {
     isCreatingWorkspace: createWorkspaceMutation.isPending,
     createProject: createProjectMutation.mutate,
     isCreatingProject: createProjectMutation.isPending,
+    deleteProject: deleteProjectMutation.mutate,
+    isDeletingProject: deleteProjectMutation.isPending,
   };
 }
