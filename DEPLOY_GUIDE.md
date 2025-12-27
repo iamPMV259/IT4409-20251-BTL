@@ -1,10 +1,21 @@
-# 🚀 Fix Lỗi 404 khi Deploy lên Vercel - HOÀN TẤT ✅
+# 🚀 Fix Lỗi 404 và Mixed Content khi Deploy lên Vercel - HOÀN TẤT ✅
 
 ## ✅ Đã sửa:
 1. Cấu hình environment variables cho API URL
 2. Tạo file `.env.development` và `.env.production`
 3. Cập nhật [`src/lib/api.ts`](src/lib/api.ts) để sử dụng env variables
 4. Thêm TypeScript types cho Vite env
+5. **Tạo `vercel.json`** để proxy API requests (fix Mixed Content HTTPS → HTTP)
+
+## 🔴 Vấn đề Mixed Content Error
+
+**Lỗi:** Backend dùng HTTP nhưng Vercel dùng HTTPS → Trình duyệt chặn!
+```
+Mixed Content: The page at 'https://fecnwmyworkspace.vercel.app/' was loaded over HTTPS, 
+but requested an insecure XMLHttpRequest endpoint 'http://131.153.239.187:8345/api/v1/auth/login'
+```
+
+**Giải pháp:** Dùng Vercel Rewrites để proxy requests qua HTTPS:
 
 ## ⚠️ Setup Local Environment (Lần đầu clone project)
 
@@ -13,40 +24,33 @@ Tạo file `.env.development` trong thư mục root:
 VITE_API_BASE_URL=/api/v1
 ```
 
-Tạo file `.env.production` (optional):
+Tạo file `.env.production`:
 ```env
-VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
+VITE_API_BASE_URL=/api/v1
 ```
 
-> 🔒 **Bảo mật:** Tất cả file `.env*` đã được thêm vào `.gitignore` và không được commit lên Git!
+> 💡 **Chú ý:** Cả dev và production đều dùng `/api/v1` (relative path)
+> - **Development:** Vite proxy → `http://131.153.239.187:8345`
+> - **Production:** Vercel rewrites → `http://131.153.239.187:8345`
+>
+> 🔒 **Bảo m~~Thêm Environment Variable~~ (KHÔNG CẦN NỮA!)
 
-## 📝 Các bước để Fix trên Vercel:
-
-### Bước 1: Thêm Environment Variable trên Vercel
-
-1. Vào Vercel Dashboard → Chọn project của bạn
-2. Vào **Settings** → **Environment Variables**
-3. Thêm variable mới:
-   ```
-   Name: VITE_API_BASE_URL
-   Value: http://131.153.239.187:8345/api/v1
-   ```
-4. Chọn environment: **Production** (và Preview nếu cần)
-5. Click **Save**
+> ✅ **Không cần cấu hình Environment Variable trên Vercel**
+> 
+> File `vercel.json` đã xử lý proxy, chỉ cần dùng relative path `/api/v1`
 
 ### Bước 2: Commit và Push
 
-1. Tạo file `.env.development` và `.env.production` trong máy local (xem phần Setup Local Environment ở trên)
-
-2. Đảm bảo đã tạo file `.env.development` trong máy local (xem phần Setup ở trên)
+1. Đảm bảo đã có file `vercel.json` trong project (đã có)
 
 2. Push code lên Git:
    ```bash
    git add .
-   git commit -m "Fix: Add environment variables for production API"
+   git commit -m "fix: Add vercel.json for API proxy to fix Mixed Content error"
    git push
    ```
 
+3. Vercel sẽ tự động build lại với config mới
    > 🔒 **An toàn:** File `.env*` không được push lên Git (pattern `.env*`
    - Vào **Deployments** tab
    - Click vào deployment mới nhất
@@ -87,26 +91,49 @@ app.add_middleware(
 
 ```
 FE_CNW/
-├── .env.development     # ⚠️ KHÔNG commit - tự tạo local
-├── .env.production      # ⚠️ KHÔNG commit - tự tạo local  
-├── .gitignore           # Pattern: .env* (ignore tất cả)
-├── src/
-│   ├── vite-env.d.ts   # TypeScript types cho env
-│   └── lib/
+├── .env.development     # ⚠️ KHfecnwmyworkspace.vercel.app`
+2. Mở DevTools (F12) → Tab **Network**
+3. Thử login
+4. Kiểm tra request:
+   - **URL:** `https://fecnwmyworkspace.vercel.app/api/v1/auth/login` (HTTPS!)
+   - **Status:** 200 OK (không còn Mixed Content error)
+5. Nếu thấy CORS error → Sửa backend (xem bên dưới)
 │       └── api.ts      # Đọc env variable
 └── vite.config.ts      # Proxy config cho dev
 ```
 
 ## ❓ Troubleshooting
+VITEMixed Content Error?
+- ✅ **Đã fix:** File `vercel.json` đã được thêm vào
+- Push code mới và Vercel sẽ tự động apply config
 
-### Vẫn còn 404?
-- Kiểm tra environment variable đã save trên Vercel chưa
-- Redeploy lại sau khi thêm env variable
+### CORS Error?
+Backend cần cho phép domain Vercel. Thêm vào backend CORS config:
+```python
+allow_origins=[
+    "https://fecnwmyworkspace.vercel.app",
+    "https://*.vercel.app",  # Cho phép tất cả preview deployments
+    "http://localhost:3000"   # Dev local
+]
+```
 
-### CORS error?
-- Backend cần thêm domain Vercel vào CORS whitelist
-- Test bằng cách cho phép `*` tạm thời
+### Vercel Rewrites không hoạt động?
+- Kiểm tra file `vercel.json` đã commit chưa
+- Redeploy lại từ Vercel dashboard
+- Check build logs có lỗi không
+## 🔧 Cách hoạt động:
 
+### Development (localhost):
+```
+Browser → /api/v1 → Vite Proxy → http://131.153.239.187:8345/api/v1
+```
+
+### Production (Vercel):
+```
+Browser → /api/v1 → Vercel Rewrites → http://131.153.239.187:8345/api/v1
+```
+
+> 💡 **Lợi ích:** Không bị Mixed Content error vì browser chỉ thấy relative path `/api/v1
 ### Backend không chạy?
 - Kiểm tra `http://131.153.239.187:8345/api/v1` có truy cập được không
 - Nếu backend cần HTTPS, đổi URL thành `https://...`

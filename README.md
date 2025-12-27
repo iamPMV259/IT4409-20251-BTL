@@ -16,12 +16,16 @@ npm install
 VITE_API_BASE_URL=/api/v1
 ```
 
-**Tạo file `.env.production`** (optional - chỉ cần khi build local):
+**Tạo file `.env.production`**:
 ```env
-VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
+VITE_API_BASE_URL=/api/v1
 ```
 
-> ⚠️ **Quan trọng:** File `.env*` không được commit lên Git. Mỗi developer cần tự tạo file này khi clone project.
+> 💡 **Lưu ý:** Cả dev và prod đều dùng `/api/v1` (relative path)
+> - Dev: Vite proxy → Backend
+> - Prod: Vercel rewrites → Backend (fix Mixed Content)
+> 
+> ⚠️ File `.env*` không được commit lên Git
 
 ### 3. Start development server
 ```bash
@@ -36,27 +40,34 @@ npm run build
 ## 🔧 Deploy lên Production
 
 ### Deploy lên Vercel
+
+**Không cần cấu hình Environment Variables!** 
+
+File [`vercel.json`](vercel.json) đã xử lý proxy API requests:
+```json
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "http://131.153.239.187:8345/api/:path*" }
+  ]
+}
+```
+
+**Chỉ cần:**
 1. Link project với GitHub
-2. Vào **Settings → Environment Variables**
-3. Thêm variable:
-   - **Name:** `VITE_API_BASE_URL`
-   - **Value:** `http://131.153.239.187:8345/api/v1`
-   - **Environment:** Production
-4. Redeploy
+2. Push code (có file `vercel.json`)
+3. Vercel tự động deploy ✅
 
-Chi tiết xem: **[DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)**
+**Lợi ích:**
+- ✅ Fix Mixed Content (HTTPS → HTTP)
+- ✅ Không cần env variables phức tạp
+- ✅ URL clean: `https://yourapp.vercel.app/api/v1/...`
+Value | Description |
+|----------|-------|-------------|
+| `VITE_API_BASE_URL` | `/api/v1` | Backend API URL (relative path) |
 
-### GitHub Actions (CI/CD)
-Nếu dùng GitHub Actions, thêm secrets:
-1. Vào **Settings → Secrets and variables → Actions**
-2. Thêm **New repository secret:**
-   - **Name:** `VITE_API_BASE_URL`
-   - **Value:** `http://131.153.239.187:8345/api/v1`
-
-## 🔒 Environment Variables
-
-Project sử dụng các environment variables sau:
-
+**Proxy Configuration:**
+- **Development:** [`vite.config.ts`](vite.config.ts) proxy → `http://131.153.239.187:8345`
+- **Production:** [`vercel.json`](vercel.json) rewrites → `http://131.153.239.187:8345`
 | Variable | Development | Production | Description |
 |----------|-------------|------------|-------------|
 | `VITE_API_BASE_URL` | `/api/v1` | `http://131.153.239.187:8345/api/v1` | Backend API URL |
