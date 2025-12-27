@@ -6,6 +6,22 @@
 3. Cập nhật [`src/lib/api.ts`](src/lib/api.ts) để sử dụng env variables
 4. Thêm TypeScript types cho Vite env
 
+## ⚠️ Setup Local Environment (Lần đầu clone project)
+
+**Bước 1:** Tạo file `.env.development` từ template:
+```bash
+# Development environment - sử dụng proxy của Vite
+VITE_API_BASE_URL=/api/v1
+```
+
+**Bước 2:** Tạo file `.env.production` (optional, chỉ cần nếu build local):
+```bash
+# Production environment - gọi trực tiếp đến backend server
+VITE_API_BASE_URL=http://131.153.239.187:8345/api/v1
+```
+
+> 💡 **Lưu ý:** Các file `.env.*` đã được thêm vào `.gitignore` để bảo mật!
+
 ## 📝 Các bước để Fix trên Vercel:
 
 ### Bước 1: Thêm Environment Variable trên Vercel
@@ -20,16 +36,20 @@
 4. Chọn environment: **Production** (và Preview nếu cần)
 5. Click **Save**
 
-### Bước 2: Redeploy
+### Bước 2: Commit và Push
 
-1. Push code mới lên Git (nếu chưa):
+1. Tạo file `.env.development` và `.env.production` trong máy local (xem phần Setup Local Environment ở trên)
+
+2. Push code lên Git:
    ```bash
    git add .
    git commit -m "Fix: Add environment variables for production API"
    git push
    ```
 
-2. Vercel sẽ tự động build lại, hoặc bạn có thể:
+   > 🔒 **An toàn:** File `.env.*` không được push lên Git (đã có trong `.gitignore`)
+
+3. Vercel sẽ tự động build lại, hoặc bạn có thể:
    - Vào **Deployments** tab
    - Click vào deployment mới nhất
    - Click **⋯** menu → **Redeploy**
@@ -65,9 +85,10 @@ app.add_middleware(
 5. Nếu thấy CORS error → Sửa backend
 6. Nếu thấy 404 → Check lại environment variable trên Vercel
 
-## 📂 File Structure
-
-```
+## 📂 File Structure⚠️ KHÔNG commit (local only)
+├── .env.production      # ⚠️ KHÔNG commit (local only)
+├── .env.example         # ✅ Template - được commit
+├── .gitignore           # Đã config ignore các file .env.*
 FE_CNW/
 ├── .env.development     # Dev: /api/v1 (với Vite proxy)
 ├── .env.production      # Prod: http://131.153.239.187:8345/api/v1

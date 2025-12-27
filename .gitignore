@@ -1,12 +1,20 @@
 node_modules/
 dist/
 
-# Environment variables
+# Environment variables - Không commit các file này lên Git
 .env
 .env.local
+.env.development
+.env.production
 .env.*.local
 
-# Keep example files
+# Chỉ giữ lại file example làm template
 !.env.example
-!.env.development
-!.env.production
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
