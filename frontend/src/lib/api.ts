@@ -1,10 +1,16 @@
 import axios from 'axios';
 
 // --- CONFIGURATION ---
-// Sử dụng environment variable để hỗ trợ cả development và production
+// Sử dụng environment variables từ file .env
+const HOST = (import.meta as any).env?.VITE_HOST || 'localhost';
+const PORT = (import.meta as any).env?.VITE_PORT || '8345';
+const BASE_ENDPOINT = (import.meta as any).env?.VITE_BASE_ENDPOINT || 'api/v1';
+
 // Development: /api/v1 (proxy qua Vite)
-// Production: http://131.153.239.187:8345/api/v1 (direct)
-const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+// Production: http://{HOST}:{PORT}/{BASE_ENDPOINT} (direct)
+const BASE_URL = (import.meta as any).env?.DEV 
+  ? `/${BASE_ENDPOINT}` 
+  : `http://${HOST}:${PORT}/${BASE_ENDPOINT}`;
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -274,6 +280,11 @@ export const workspaceApi = {
 
   createProject: (workspaceId: string, data: ProjectCreateRequest) =>
     api.post<ProjectCreatedResponse>(`/workspaces/${workspaceId}/projects`, data),
+    
+  // POST /api/v1/workspaces/{workspace_id}/members - Add members to workspace
+  addMembers: (workspaceId: string, members: { userEmail: string; role: string }[]) =>
+    api.post(`/workspaces/${workspaceId}/members`, members),
+    
   // --- MỚI: API QUAN TRỌNG ĐỂ FIX DASHBOARD ---
   // GET /api/v1/workspaces/joined_projects
   getJoinedProjects: (workspaceId?: string) => 

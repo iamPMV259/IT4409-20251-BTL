@@ -1,36 +1,35 @@
-import React, { useState, useMemo } from 'react';
 import {
-  Plus,
-  Search,
-  FolderPlus,
-  Loader2,
-  LogOut,
-  LayoutGrid,
-  Shield,
-  User,
-  Hash,
+    Hash,
+    LayoutGrid,
+    Loader2,
+    Plus,
+    Shield,
+    User,
+    UserPlus
 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '../context/auth-context';
 import { useWorkspaces } from '../hooks/useWorkspaces';
-import { toast } from 'sonner';
+import { AddMemberDialog } from './add-member-dialog';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogDescription,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
 } from './ui/dialog';
+import { Input } from './ui/input';
 import { Label } from './ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from './ui/select';
 
 interface DashboardViewProps {
   onOpenProject: (projectId: string, projectTitle: string) => void;
@@ -61,6 +60,7 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
 
   // Handlers
   const handleCreateWorkspace = () => {
@@ -171,6 +171,18 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
             </SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Add Member Button - only show when a workspace is selected */}
+        {currentWorkspaceId !== 'ALL' && (
+          <Button
+            variant="outline"
+            onClick={() => setIsAddMemberDialogOpen(true)}
+            className="gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            Thêm thành viên
+          </Button>
+        )}
       </div>
 
 
@@ -294,6 +306,16 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Add Member Dialog */}
+      {currentWorkspaceId !== 'ALL' && (
+        <AddMemberDialog
+          isOpen={isAddMemberDialogOpen}
+          onClose={() => setIsAddMemberDialogOpen(false)}
+          workspaceId={currentWorkspaceId}
+          workspaceName={(workspaces || []).find(w => w.id === currentWorkspaceId)?.name || 'Workspace'}
+        />
+      )}
     </div>
   );
 }
