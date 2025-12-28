@@ -1,13 +1,12 @@
-// src/context/auth-context.tsx
+import { useQueryClient } from '@tanstack/react-query';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, authApi } from '../lib/api';
-import { toast } from 'sonner';
+import { UserResponse, authApi } from '../lib/api';
 
 interface AuthContextType {
-  user: User | null;
+  user: UserResponse | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (token: string, user: User) => void;
+  login: (token: string, user: UserResponse) => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -15,16 +14,21 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const login = (token: string, newUser: User) => {
+  const login = (token: string, newUser: UserResponse) => {
     localStorage.setItem('accessToken', token);
+    // Clear all cached queries when logging in as new user
+    queryClient.clear();
     setUser(newUser);
   };
 
   const logout = () => {
     localStorage.removeItem('accessToken');
+    // Clear all cached queries when logging out
+    queryClient.clear();
     setUser(null);
   };
 
@@ -39,14 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data } = await authApi.getMe();
       setUser(data);
     } catch (error) {
-      console.error("Session expired", error);
-      logout(); // Token lỗi thì logout luôn
+      console.error("Auth check failed:", error);
+      logout();
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Chạy 1 lần khi app load để kiểm tra xem user đã đăng nhập chưa
   useEffect(() => {
     checkAuth();
   }, []);

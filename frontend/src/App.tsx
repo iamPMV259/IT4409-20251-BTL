@@ -1,5 +1,7 @@
 // src/App.tsx
 import React, { useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { LoginPage } from './components/login-page';
 import { SignUpPage } from './components/signup-page';
 import { ForgotPasswordPage } from './components/forgot-password-page';
@@ -8,30 +10,19 @@ import { DashboardView } from './components/dashboard-view';
 import { ProjectView } from './components/project-view';
 import { MyWorkView } from './components/my-work-view';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider, useAuth } from './context/auth-context'; // Import mới
-
+import { AuthProvider, useAuth } from './context/auth-context';
+import { SocketProvider } from './context/socket-context';
+import { queryClient } from './lib/query-client';
 type AuthPage = 'login' | 'signup' | 'forgot-password';
 type AppView = 'dashboard' | 'board' | 'my-work' | 'settings';
 
 // Tách MainApp ra để dùng được hook useAuth
 function MainApp() {
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const [authPage, setAuthPage] = useState<AuthPage>('login');
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentProjectTitle, setCurrentProjectTitle] = useState<string>('');
-
-  // Hiển thị loading khi đang kiểm tra authentication
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Đang tải...</p>
-        </div>
-      </div>
-    );
-  }
 
   // ... logic xử lý view giữ nguyên ...
   const handleNavigate = (view: string) => {
@@ -60,9 +51,14 @@ function MainApp() {
   }
 
   return (
-    <MainLayout currentView={currentView} onNavigate={handleNavigate} onLogout={logout}>
+    <MainLayout 
+      currentView={currentView} 
+      onNavigate={handleNavigate} 
+      onLogout={logout}
+      onOpenProject={handleOpenProject}
+    >
       {currentView === 'dashboard' && <DashboardView onOpenProject={handleOpenProject} />}
-      {currentView === 'my-work' && <MyWorkView />}
+      {currentView === 'my-work' && <MyWorkView onNavigateToProject={handleOpenProject} />}
       {currentView === 'board' && currentProjectId && (
         <ProjectView projectId={currentProjectId} projectTitle={currentProjectTitle} onBack={handleBackToDashboard} />
       )}
@@ -73,9 +69,14 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-      <Toaster />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <SocketProvider>
+          <MainApp />
+          <Toaster />
+        </SocketProvider>
+      </AuthProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }

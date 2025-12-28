@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Users, Search, Loader2, Briefcase } from 'lucide-react'; // Thêm icon Briefcase
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Input } from './ui/input';
+import React, { useState, useMemo } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from './ui/dialog';
-import { Label } from './ui/label';
+  Plus,
+  Search,
+  FolderPlus,
+  Loader2,
+  LogOut,
+  LayoutGrid,
+  Shield,
+  User,
+  Hash,
+} from 'lucide-react';
+import { useAuth } from '../context/auth-context';
+import { useWorkspaces } from '../hooks/useWorkspaces';
+import { toast } from 'sonner';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 import {
   Select,
   SelectContent,
@@ -19,236 +22,163 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { workspaceApi, projectApi, Project, Workspace } from '../lib/api';
-import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from './ui/dialog';
+import { Label } from './ui/label';
 
 interface DashboardViewProps {
   onOpenProject: (projectId: string, projectTitle: string) => void;
 }
 
 export function DashboardView({ onOpenProject }: DashboardViewProps) {
-  // --- Data States ---
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+  const { logout, user } = useAuth();
+  
+  // Use React Query hooks
+  const {
+    workspaces,
+    isLoadingWorkspaces,
+    joinedProjects,
+    isLoadingProjects,
+    createWorkspace,
+    isCreatingWorkspace,
+    createProject,
+    isCreatingProject,
+  } = useWorkspaces();
 
-  // --- UI States: Create Project ---
-  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [newProjectTitle, setNewProjectTitle] = useState('');
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-
-  // --- UI States: Create Workspace (MỚI) ---
-  const [isWorkspaceDialogOpen, setIsWorkspaceDialogOpen] = useState(false);
-  const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-
-  // --- Filter State ---
+  // Local UI State
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Fetch Workspaces khi load trang
-  useEffect(() => {
-    const fetchWorkspaces = async () => {
-      try {
-        const { data } = await workspaceApi.getAll();
-        // Đảm bảo data là array
-        const workspacesArray = Array.isArray(data) ? data : (data?.workspaces || []);
-        setWorkspaces(workspacesArray);
-        
-        // Tự động chọn workspace đầu tiên nếu có
-        if (workspacesArray.length > 0) {
-          setCurrentWorkspaceId(workspacesArray[0].id);
-        }
-      } catch (error) {
-        console.error(error);
-        toast.error("Không thể tải danh sách Workspace");
-        setWorkspaces([]);
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-    fetchWorkspaces();
-  }, []);
+  // Dialog states
+  const [isWorkspaceDialogOpen, setIsWorkspaceDialogOpen] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
 
-  // 2. Fetch Projects khi Workspace thay đổi
-  useEffect(() => {
-    const fetchProjects = async () => {
-      if (!currentWorkspaceId) {
-        setProjects([]);
-        return;
-      }
-      
-      setIsProjectsLoading(true);
-      try {
-        const { data } = await projectApi.getAllByWorkspace(currentWorkspaceId);
-        // Đảm bảo data là array, nếu không thì set empty array
-        const projectsArray = Array.isArray(data) ? data : (data?.projects || []);
-        setProjects(projectsArray);
-      } catch (error) {
-        console.error(error);
-        toast.error("Không thể tải danh sách dự án");
-        setProjects([]); // Reset về empty array khi lỗi
-      } finally {
-        setIsProjectsLoading(false);
-      }
-    };
-
-    fetchProjects();
-  }, [currentWorkspaceId]);
-
-  // 3. Xử lý tạo Project
-  const handleCreateProject = async () => {
-    if (!newProjectTitle.trim() || !currentWorkspaceId) return;
-    
-    setIsCreatingProject(true);
-    try {
-      const { data: newProject } = await projectApi.create(currentWorkspaceId, {
-        name: newProjectTitle,
-        description: "Được tạo từ TaskFlow Web"
-      });
-      setProjects([...projects, newProject]);
-      setNewProjectTitle('');
-      setIsProjectDialogOpen(false);
-      toast.success("Tạo dự án thành công!");
-    } catch (error) {
-      toast.error("Tạo dự án thất bại");
-    } finally {
-      setIsCreatingProject(false);
-    }
-  };
-
-  // 4. Xử lý tạo Workspace (LOGIC MỚI)
-  const handleCreateWorkspace = async () => {
+  // Handlers
+  const handleCreateWorkspace = () => {
     if (!newWorkspaceName.trim()) return;
-
-    setIsCreatingWorkspace(true);
-    try {
-      const { data: newWorkspace } = await workspaceApi.create(newWorkspaceName);
-      
-      // Cập nhật danh sách và chọn luôn workspace mới tạo
-      const updatedWorkspaces = [...workspaces, newWorkspace];
-      setWorkspaces(updatedWorkspaces);
-      setCurrentWorkspaceId(newWorkspace.id);
-      
-      setNewWorkspaceName('');
-      setIsWorkspaceDialogOpen(false);
-      toast.success("Tạo Workspace thành công!");
-    } catch (error: any) {
-      console.error(error);
-      const msg = error.response?.data?.detail?.[0]?.msg || "Tạo Workspace thất bại";
-      toast.error(msg);
-    } finally {
-      setIsCreatingWorkspace(false);
-    }
+    createWorkspace(newWorkspaceName, {
+      onSuccess: () => {
+        setNewWorkspaceName('');
+        setIsWorkspaceDialogOpen(false);
+        toast.success('Đã tạo Workspace');
+      },
+      onError: () => {
+        toast.error('Lỗi tạo Workspace');
+      },
+    });
   };
 
-  // Helper lọc dự án client-side - đảm bảo projects là array
-  const filteredProjects = Array.isArray(projects) 
-    ? projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : [];
+  const handleCreateProject = () => {
+    if (!newProjectName.trim() || currentWorkspaceId === 'ALL') return;
+    createProject(
+      {
+        workspaceId: currentWorkspaceId,
+        name: newProjectName,
+        description: newProjectDesc,
+      },
+      {
+        onSuccess: () => {
+          setIsProjectDialogOpen(false);
+          setNewProjectName('');
+          setNewProjectDesc('');
+          toast.success('Đã tạo dự án');
+        },
+        onError: () => {
+          toast.error('Lỗi tạo dự án');
+        },
+      }
+    );
+  };
 
-  // --- RENDER ---
+  // Filter - Memoize để tránh re-compute không cần thiết
+  const filteredProjects = useMemo(() => {
+    const projects = joinedProjects || [];
+    const workspaceProjects =
+      currentWorkspaceId === 'ALL'
+        ? projects
+        : projects.filter((p) => p.workspace_id === currentWorkspaceId);
 
-  // Loading ban đầu
-  if (isLoadingData) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-blue-600"/></div>;
-  }
+    return workspaceProjects.filter((p) =>
+      p.project_name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [joinedProjects, currentWorkspaceId, searchQuery]);
 
-  // Trường hợp User chưa có Workspace nào -> Bắt buộc tạo
-  if (workspaces.length === 0) {
+  const isLoadingInit = isLoadingWorkspaces || isLoadingProjects;
+
+  if (isLoadingInit) {
     return (
-      <div className="flex flex-col h-full items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Briefcase className="w-8 h-8" />
-          </div>
-          <h2 className="text-2xl font-semibold text-slate-900 mb-2">Chào mừng đến với TaskFlow!</h2>
-          <p className="text-slate-600 mb-6">
-            Bạn chưa tham gia Workspace nào. Hãy tạo một không gian làm việc mới để bắt đầu quản lý dự án.
-          </p>
-          
-          <div className="space-y-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <div className="space-y-2 text-left">
-              <Label>Tên Workspace</Label>
-              <Input 
-                placeholder="Ví dụ: Công ty ABC" 
-                value={newWorkspaceName}
-                onChange={(e) => setNewWorkspaceName(e.target.value)}
-              />
-            </div>
-            <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700" 
-              onClick={handleCreateWorkspace}
-              disabled={isCreatingWorkspace || !newWorkspaceName.trim()}
-            >
-              {isCreatingWorkspace ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <Plus className="w-4 h-4 mr-2"/>}
-              Tạo Workspace Mới
-            </Button>
-          </div>
-        </div>
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-slate-900 mb-2">My Workspace</h1>
-        <p className="text-slate-600">Quản lý các dự án trong không gian làm việc của bạn.</p>
-      </div>
-
-      {/* Controls Bar */}
-      <div className="mb-6 space-y-4">
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Tìm kiếm dự án..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          {/* Workspace Selector + Create Workspace Trigger */}
-          <div className="flex gap-2">
-            <Select 
-              value={currentWorkspaceId || ''} 
-              onValueChange={(val) => {
-                if (val === 'CREATE_NEW') {
-                  setIsWorkspaceDialogOpen(true);
-                } else {
-                  setCurrentWorkspaceId(val);
-                }
-              }}
-            >
-              <SelectTrigger className="w-[240px]">
-                <SelectValue placeholder="Chọn Workspace" />
-              </SelectTrigger>
-              <SelectContent>
-                {workspaces.map(w => (
-                  <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                ))}
-                {/* Option đặc biệt để mở Dialog tạo mới */}
-                <div className="p-1 border-t border-slate-100 mt-1">
-                  <SelectItem value="CREATE_NEW" className="text-blue-600 font-medium cursor-pointer">
-                    <div className="flex items-center">
-                      <Plus className="w-4 h-4 mr-2" /> Tạo Workspace mới
-                    </div>
-                  </SelectItem>
-                </div>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <LayoutGrid className="w-6 h-6 text-blue-600" />
+            Dashboard
+          </h1>
+          <p className="text-slate-600">
+            Xin chào{' '}
+            <span className="font-semibold text-slate-900">
+              {user?.name}
+            </span>
+            , bạn đang tham gia{' '}
+            <span className="font-bold text-blue-600">
+              {(joinedProjects || []).length}
+            </span>{' '}
+            dự án.
+          </p>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        
+      {/* Controls */}
+      <div className="mb-8 flex flex-col lg:flex-row gap-4 justify-between bg-white p-4 rounded-2xl border shadow-sm">
+        <Select
+          value={currentWorkspaceId}
+          onValueChange={val =>
+            val === 'CREATE_NEW'
+              ? setIsWorkspaceDialogOpen(true)
+              : setCurrentWorkspaceId(val)
+          }
+        >
+          <SelectTrigger className="w-full lg:w-[260px]">
+            <SelectValue placeholder="Chọn Workspace" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Tất cả Workspaces</SelectItem>
+            {(workspaces || []).map(w => (
+              <SelectItem key={w.id} value={w.id}>
+                {w.name}
+              </SelectItem>
+            ))}
+            <SelectItem value="CREATE_NEW" className="text-blue-600">
+              <Plus className="w-4 h-4 inline mr-2" />
+              Tạo Workspace mới
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+
+      {/* Projects Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {/* Card: Create New Project */}
+        {currentWorkspaceId !== 'ALL' && (
+
         <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
           <DialogTrigger asChild>
             <button className="group aspect-[4/3] rounded-xl border-2 border-dashed border-slate-300 bg-white hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-3">
@@ -263,15 +193,15 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Tạo dự án mới</DialogTitle>
-              <DialogDescription>Dự án sẽ được tạo trong <strong>{workspaces.find(w => w.id === currentWorkspaceId)?.name}</strong></DialogDescription>
+              <DialogDescription>Dự án sẽ được tạo trong <strong>{(workspaces || []).find(w => w.id === currentWorkspaceId)?.name}</strong></DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label>Tên dự án</Label>
                 <Input
                   placeholder="Ví dụ: Website Redesign"
-                  value={newProjectTitle}
-                  onChange={(e) => setNewProjectTitle(e.target.value)}
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
                 />
               </div>
               <div className="flex gap-2 justify-end">
@@ -283,62 +213,84 @@ export function DashboardView({ onOpenProject }: DashboardViewProps) {
             </div>
           </DialogContent>
         </Dialog>
+        
+        )}
+        {filteredProjects.map(project => {
+          const workspaceName =
+            (workspaces || []).find(w => w.id === project.workspace_id)
+              ?.name || 'Shared Project';
 
-        {/* Project Cards List */}
-        {isProjectsLoading ? (
-           // Skeleton loading đơn giản
-           [1,2].map(i => <div key={i} className="aspect-[4/3] rounded-xl bg-slate-100 animate-pulse" />)
-        ) : (
-          filteredProjects.map((project) => (
+          const displayName =
+            !project.project_name || project.project_name === 'string'
+              ? 'Dự án mẫu (Untitled)'
+              : project.project_name;
+
+          return (
             <button
-              key={project.id}
-              onClick={() => onOpenProject(project.id, project.name)}
-              className="group aspect-[4/3] rounded-xl bg-white shadow-sm hover:shadow-lg border border-slate-200 hover:border-blue-300 transition-all overflow-hidden text-left flex flex-col"
+              key={project.project_id}
+              onClick={() =>
+                onOpenProject(project.project_id, displayName)
+              }
+              className="group flex flex-col h-[200px] rounded-2xl bg-white border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left overflow-hidden"
             >
-              <div className="h-20 bg-gradient-to-br from-blue-500 to-blue-600 p-4 flex items-center justify-between w-full">
-                <h3 className="text-white line-clamp-2 flex-1 font-medium text-lg">{project.name}</h3>
-                <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm shrink-0 ml-2">
-                  {project.status || 'Active'}
-                </Badge>
+              {/* ===== FIXED HEADER ===== */}
+              <div className="h-2/5 bg-blue-600 p-4 flex flex-col justify-between">
+                <div className="flex justify-end">
+                  <div className="flex items-center gap-1 bg-white/20 backdrop-blur text-white text-[10px] font-bold uppercase px-2 py-1 rounded-full">
+                    {project.role === 'owner' ? (
+                      <Shield className="w-3 h-3" fill="currentColor" />
+                    ) : (
+                      <User className="w-3 h-3" />
+                    )}
+                    {project.role}
+                  </div>
+                </div>
+
+                <h3
+                  className="text-white font-bold text-lg leading-tight line-clamp-2 drop-shadow-sm"
+                  title={displayName}
+                >
+                  {displayName}
+                </h3>
               </div>
+
+              {/* Body */}
               <div className="p-4 flex-1 flex flex-col justify-between">
-                <p className="text-slate-500 text-sm line-clamp-3 mb-4">
-                  {project.description || "Chưa có mô tả."}
-                </p>
-                <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-500 text-sm">
-                    {project.members ? project.members.length : 1} Thành viên
+                <div className="text-sm text-slate-500 truncate">
+                  {workspaceName}
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t text-xs text-slate-400 font-mono">
+                  <span className="flex items-center gap-1 truncate">
+                    <Hash className="w-3 h-3" />
+                    {project.project_id.slice(0, 8)}...
                   </span>
+                  <span className="text-lg">→</span>
                 </div>
               </div>
             </button>
-          ))
-        )}
+          );
+        })}
       </div>
 
-      {/* Dialog: Create Workspace (Ẩn, được kích hoạt bởi Select hoặc Empty State) */}
-      <Dialog open={isWorkspaceDialogOpen} onOpenChange={setIsWorkspaceDialogOpen}>
+      {/* Workspace Dialog */}
+      <Dialog
+        open={isWorkspaceDialogOpen}
+        onOpenChange={setIsWorkspaceDialogOpen}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Tạo Workspace mới</DialogTitle>
-            <DialogDescription>Tạo không gian làm việc mới cho team của bạn.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>Tên Workspace</Label>
-              <Input 
-                placeholder="Ví dụ: Team Marketing" 
-                value={newWorkspaceName}
-                onChange={(e) => setNewWorkspaceName(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setIsWorkspaceDialogOpen(false)}>Hủy</Button>
-              <Button onClick={handleCreateWorkspace} className="bg-blue-600 hover:bg-blue-700" disabled={isCreatingWorkspace}>
-                {isCreatingWorkspace ? 'Đang tạo...' : 'Tạo Workspace'}
-              </Button>
-            </div>
+            <Label>Tên Workspace</Label>
+            <Input
+              value={newWorkspaceName}
+              onChange={e => setNewWorkspaceName(e.target.value)}
+            />
+            <Button onClick={handleCreateWorkspace} className="w-full">
+              Tạo Workspace
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
