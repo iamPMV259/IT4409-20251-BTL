@@ -1,7 +1,6 @@
 
   # Project Management Website MVP
 
-  This is a code bundle for Project Management Website MVP. The original project is available at https://www.figma.com/design/K2fm4cNzBgZWcreorhfc5g/Project-Management-Website-MVP.
 
   ## Running the code
 
@@ -10,5 +9,4 @@
   Run `npm run dev` to start the development server.
 
 
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/vinhbc16/fe_cnw)
   
