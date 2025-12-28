@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { CardDetailModal } from './card-detail-modal';
 import { Task } from './task-card';
+import { useProjectBoard } from '../hooks/useProjectBoard';
+import { taskApi } from '../lib/api';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { projectApi, taskApi, Task as ApiTask, Column as ApiColumn, CreateTaskPayload } from '../lib/api';
-import { toast } from 'sonner';
 
 interface CalendarViewProps {
   projectId: string;
@@ -24,86 +26,31 @@ interface CalendarViewProps {
 
 type CalendarViewMode = 'month' | 'week' | 'day';
 
-interface CalendarTask extends Task {
-  columnId: string;
-}
-
-// Convert API Task to CalendarTask
-const convertApiTaskToCalendarTask = (apiTask: ApiTask, columnId: string): CalendarTask => {
-  const assignees = (apiTask.assignees || []).map((a: any) => 
-    typeof a === 'string' ? { name: a, avatar: '' } : { name: a.name || a.id || '', avatar: a.avatar || '' }
-  );
-  
-  const labels = (apiTask.labels || []).map((l: any) => 
-    typeof l === 'string' ? { name: l, color: 'bg-slate-400' } : { name: l.name || l.id || '', color: l.color || 'bg-slate-400' }
-  );
-  
-  const checklist = (apiTask as any).checklist || { 
-    total: (apiTask as any).checklists?.length || 0, 
-    completed: 0 
-  };
-  
-  return {
-    id: apiTask.id,
-    title: apiTask.title,
-    description: apiTask.description || '',
-    assignees,
-    labels,
-    dueDate: apiTask.dueDate,
-    checklist,
-    comments: apiTask.comments || 0,
-    attachments: apiTask.attachments || 0,
-    columnId,
-  };
-};
-
 export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
-  const [tasks, setTasks] = useState<CalendarTask[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedColumnId, setSelectedColumnId] = useState<string>('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [draggedTask, setDraggedTask] = useState<CalendarTask | null>(null);
+  const [draggedTask, setDraggedTask] = useState<any>(null);
   
-  // Fetch tasks from API
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!projectId) return;
-      
-      setIsLoading(true);
-      try {
-        // Fetch project detail to get columns and tasks
-        const { data: projectData } = await projectApi.getDetail(projectId);
-        
-        if (projectData && Array.isArray((projectData as any).columns)) {
-          // Collect all tasks from all columns
-          const allTasks: CalendarTask[] = [];
-          (projectData as any).columns.forEach((col: ApiColumn) => {
-            if (Array.isArray(col.tasks)) {
-              col.tasks.forEach((task: ApiTask) => {
-                allTasks.push(convertApiTaskToCalendarTask(task, col.id));
-              });
-            }
-          });
-          setTasks(allTasks);
-        } else {
-          setTasks([]);
-        }
-      } catch (error) {
-        console.error('Error fetching calendar tasks:', error);
-        toast.error('Không thể tải dữ liệu calendar');
-        setTasks([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchTasks();
-  }, [projectId]);
+  // Sử dụng React Query hook
+  const { board, isLoading, moveTask, isMovingTask } = useProjectBoard(projectId);
+  
+  // Tổng hợp tất cả tasks từ các columns
+  const allTasks = useMemo(() => {
+    if (!board?.columns) return [];
+    return board.columns.flatMap(column => 
+      (column.tasks || []).map(task => ({
+        ...task,
+        columnId: column.id,
+        columnTitle: column.title
+      }))
+    );
+  }, [board]);
 
   // Calendar navigation
   const goToPrevious = () => {
@@ -156,7 +103,7 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
 
   // Get tasks for a specific date
   const getTasksForDate = (date: Date) => {
-    return tasks.filter(task => {
+    return allTasks.filter(task => {
       if (!task.dueDate) return false;
       const taskDate = new Date(task.dueDate);
       return (
@@ -167,116 +114,83 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
     });
   };
 
-  const handleTaskClick = (task: CalendarTask) => {
+  const handleTaskClick = (task: any) => {
+    // Debug log để kiểm tra task data
+    console.log('Calendar task clicked:', task);
+    
+    // Đảm bảo task có đầy đủ thông tin
+    if (!task) {
+      toast.error('Không thể mở task');
+      return;
+    }
+    
+    // Set task ngay lập tức
     setSelectedTask(task);
     setIsModalOpen(true);
   };
 
-  const handleUpdateTask = async (updatedTask: Task) => {
-    // Update local state immediately
-    setTasks(tasks.map(task => 
-      task.id === updatedTask.id 
-        ? { ...task, ...updatedTask }
-        : task
-    ));
-    
-    // Optionally refresh from server to ensure sync
-    try {
-      const { data: projectData } = await projectApi.getDetail(projectId);
-      if (projectData && Array.isArray((projectData as any).columns)) {
-        const allTasks: CalendarTask[] = [];
-        (projectData as any).columns.forEach((col: ApiColumn) => {
-          if (Array.isArray(col.tasks)) {
-            col.tasks.forEach((task: ApiTask) => {
-              allTasks.push(convertApiTaskToCalendarTask(task, col.id));
-            });
-          }
-        });
-        setTasks(allTasks);
-      }
-    } catch (error) {
-      console.error('Error refreshing tasks after update:', error);
-    }
+  const handleUpdateTask = (updatedTask: Task) => {
+    // Close modal sau khi update
+    setIsModalOpen(false);
+    setSelectedTask(null);
+    toast.success('Cập nhật task thành công');
+  };
+  
+  const handleDeleteTask = (taskId: string, columnId: string) => {
+    // React Query hook sẽ xử lý
+    setIsModalOpen(false);
+    toast.success('Đã xóa task');
   };
 
-  const handleDateClick = (date: Date) => {
+  const handleDateClick = (date: Date, columnId: string) => {
+    if (!columnId && board?.columns?.[0]) {
+      columnId = board.columns[0].id; // Mặc định dùng column đầu tiên
+    }
     setSelectedDate(date);
+    setSelectedColumnId(columnId);
     setIsCreateModalOpen(true);
   };
 
   const handleCreateTask = async () => {
-    if (!newTaskTitle.trim() || !selectedDate) return;
+    if (!newTaskTitle.trim() || !selectedDate || !selectedColumnId) {
+      toast.error('Vui lòng nhập tên task');
+      return;
+    }
     
     try {
-      // Get first column from project (usually "To Do" column)
-      const { data: projectData } = await projectApi.getDetail(projectId);
-      let columnId = '';
-      
-      if (projectData && Array.isArray((projectData as any).columns) && (projectData as any).columns.length > 0) {
-        columnId = (projectData as any).columns[0].id;
-      } else {
-        // If no columns, create default columns first
-        const { data: newColumns } = await projectApi.createDefaultColumns(projectId);
-        if (Array.isArray(newColumns) && newColumns.length > 0) {
-          columnId = newColumns[0].id;
-        }
-      }
-      
-      if (!columnId) {
-        toast.error('Không thể tạo task: không tìm thấy cột');
-        return;
-      }
-      
-      // Create task via API
-      const payload = {
-        title: newTaskTitle.trim(),
+      await taskApi.create(selectedColumnId, {
+        title: newTaskTitle,
         description: '',
-        dueDate: selectedDate.toISOString().split('T')[0],
-        assignees: [],
-        labels: [],
-      };
-      
-      const { data: newTask } = await taskApi.create(columnId, payload);
-      
-      // Convert and add to tasks
-      const calendarTask = convertApiTaskToCalendarTask(newTask, columnId);
-      setTasks([...tasks, calendarTask]);
+        dueDate: selectedDate.toISOString(),
+      });
+      toast.success('Đã tạo task mới');
       setNewTaskTitle('');
       setIsCreateModalOpen(false);
-      toast.success('Đã tạo task mới');
     } catch (error) {
-      console.error('Error creating task:', error);
-      toast.error('Không thể tạo task mới');
+      toast.error('Lỗi tạo task');
+      console.error(error);
     }
   };
 
-  const handleDragStart = (task: CalendarTask) => {
+  const handleDragStart = (task: any, e: React.DragEvent) => {
     setDraggedTask(task);
+    e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDrop = async (date: Date) => {
+  const handleDrop = async (date: Date, e: React.DragEvent) => {
+    e.preventDefault();
     if (!draggedTask) return;
     
+    const newDueDate = date.toISOString();
+    
     try {
-      const newDueDate = date.toISOString().split('T')[0];
-      
-      // Update task via API
-      await taskApi.update(draggedTask.id, {
-        dueDate: newDueDate,
-      });
-      
-      // Update local state
-      const updatedTasks = tasks.map(task =>
-        task.id === draggedTask.id
-          ? { ...task, dueDate: newDueDate }
-          : task
-      );
-      setTasks(updatedTasks);
+      // Cập nhật dueDate qua API
+      await taskApi.update(draggedTask.id, { dueDate: newDueDate });
+      toast.success('Đã chuyển task sang ' + date.toLocaleDateString('vi-VN'));
       setDraggedTask(null);
-      toast.success('Đã cập nhật due date');
     } catch (error) {
-      console.error('Error updating task due date:', error);
-      toast.error('Không thể cập nhật due date');
+      toast.error('Lỗi khi chuyển task');
+      console.error(error);
     }
   };
 
@@ -298,15 +212,17 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
   };
 
   const formatMonthYear = () => {
-    return currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return currentDate.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' });
   };
 
   const monthDates = getMonthDates();
-
+  
+  // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="flex flex-col h-full bg-slate-50 items-center justify-center">
+        <CalendarIcon className="w-12 h-12 text-slate-400 animate-pulse mb-4" />
+        <p className="text-slate-600">Đang tải lịch...</p>
       </div>
     );
   }
@@ -327,7 +243,7 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
                 onClick={() => setViewMode('month')}
                 className={viewMode === 'month' ? 'bg-blue-600 hover:bg-blue-700' : ''}
               >
-                Month
+                Tháng
               </Button>
               <Button
                 variant={viewMode === 'week' ? 'default' : 'ghost'}
@@ -335,7 +251,7 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
                 onClick={() => setViewMode('week')}
                 className={viewMode === 'week' ? 'bg-blue-600 hover:bg-blue-700' : ''}
               >
-                Week
+                Tuần
               </Button>
               <Button
                 variant={viewMode === 'day' ? 'default' : 'ghost'}
@@ -343,14 +259,14 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
                 onClick={() => setViewMode('day')}
                 className={viewMode === 'day' ? 'bg-blue-600 hover:bg-blue-700' : ''}
               >
-                Day
+                Ngày
               </Button>
             </div>
 
             {/* Navigation */}
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={goToToday}>
-                Today
+                Hôm nay
               </Button>
               <div className="flex items-center gap-1 border border-slate-200 rounded-lg">
                 <Button variant="ghost" size="icon" onClick={goToPrevious} className="h-9 w-9">
@@ -371,8 +287,8 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Weekday headers */}
             <div className="grid grid-cols-7 border-b border-slate-200">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="p-3 text-center text-slate-600 border-r border-slate-200 last:border-r-0">
+              {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(day => (
+                <div key={day} className="p-3 text-center text-slate-600 font-medium border-r border-slate-200 last:border-r-0">
                   {day}
                 </div>
               ))}
@@ -384,12 +300,12 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
                 const dateTasks = getTasksForDate(date);
                 return (
                   <div
-                    key={index}
-                    className={`min-h-24 lg:min-h-32 border-r border-b border-slate-200 last:border-r-0 p-2 ${
+                    key={date.toISOString()}
+                    className={`min-h-24 lg:min-h-32 border-r border-b border-slate-200 last:border-r-0 p-2 hover:bg-slate-50 transition-colors ${
                       !isCurrentMonth(date) ? 'bg-slate-50' : 'bg-white'
                     } ${isToday(date) ? 'bg-blue-50' : ''}`}
                     onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(date)}
+                    onDrop={(e) => handleDrop(date, e)}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span
@@ -406,8 +322,8 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 opacity-0 hover:opacity-100"
-                        onClick={() => handleDateClick(date)}
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDateClick(date, board?.columns?.[0]?.id || '')}
                       >
                         <Plus className="w-3 h-3" />
                       </Button>
@@ -415,22 +331,30 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
 
                     {/* Tasks for this date */}
                     <div className="space-y-1">
-                      {dateTasks.slice(0, 3).map(task => (
+                      {dateTasks.slice(0, 3).map((task, taskIndex) => (
                         <div
-                          key={task.id}
+                          key={task.id || `task-${date.toISOString()}-${taskIndex}`}
                           draggable
-                          onDragStart={() => handleDragStart(task)}
+                          onDragStart={(e) => handleDragStart(task, e)}
                           onClick={() => handleTaskClick(task)}
-                          className={`${
-                            task.labels[0]?.color || 'bg-slate-200'
-                          } text-white px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity`}
+                          className="bg-white border border-slate-200 text-slate-800 px-2 py-1 rounded cursor-move hover:shadow-md transition-shadow text-xs"
                         >
-                          <p className="truncate">{task.title}</p>
+                          <p className="truncate font-medium">{task.title}</p>
+                          {task.labels && task.labels.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {task.labels.slice(0, 2).map((label: any, idx: number) => {
+                                const labelId = typeof label === 'string' ? label : (label?.id || `label-${idx}`);
+                                return (
+                                  <div key={`${task.id || 'task'}-label-${labelId}`} className="w-2 h-2 rounded-full bg-blue-500" />
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       ))}
                       {dateTasks.length > 3 && (
-                        <p className="text-slate-500 px-2">
-                          +{dateTasks.length - 3} more
+                        <p className="text-slate-500 px-2 text-xs">
+                          +{dateTasks.length - 3} task khác
                         </p>
                       )}
                     </div>
@@ -446,7 +370,7 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
       {viewMode === 'week' && (
         <div className="flex-1 overflow-auto p-4 lg:p-6">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <p className="text-slate-600 text-center">Week view coming soon</p>
+            <p className="text-slate-600 text-center">Chế độ xem tuần đang được phát triển</p>
           </div>
         </div>
       )}
@@ -455,7 +379,7 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
       {viewMode === 'day' && (
         <div className="flex-1 overflow-auto p-4 lg:p-6">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <p className="text-slate-600 text-center">Day view coming soon</p>
+            <p className="text-slate-600 text-center">Chế độ xem ngày đang được phát triển</p>
           </div>
         </div>
       )}
@@ -466,20 +390,22 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onUpdate={handleUpdateTask}
+        onDelete={handleDeleteTask}
       />
 
       {/* Create Task Modal */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
+            <DialogTitle>Tạo Task Mới</DialogTitle>
+            <DialogDescription>Tạo task mới với ngày đáo hạn đã chọn</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="task-title">Task Title</Label>
+              <Label htmlFor="task-title">Tên Task</Label>
               <Input
                 id="task-title"
-                placeholder="Enter task title..."
+                placeholder="Nhập tên task..."
                 value={newTaskTitle}
                 onChange={(e) => setNewTaskTitle(e.target.value)}
                 onKeyDown={(e) => {
@@ -490,10 +416,10 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
               />
             </div>
             {selectedDate && (
-              <p className="text-slate-600">
-                Due date: {selectedDate.toLocaleDateString('en-US', { 
+              <p className="text-slate-600 text-sm">
+                📅 Hạn: {selectedDate.toLocaleDateString('vi-VN', { 
+                  day: '2-digit',
                   month: 'long', 
-                  day: 'numeric', 
                   year: 'numeric' 
                 })}
               </p>
@@ -501,10 +427,10 @@ export function CalendarView({ projectId, projectTitle, onBack }: CalendarViewPr
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-              Cancel
+              Hủy
             </Button>
             <Button onClick={handleCreateTask} className="bg-blue-600 hover:bg-blue-700">
-              Create Task
+              Tạo Task
             </Button>
           </DialogFooter>
         </DialogContent>

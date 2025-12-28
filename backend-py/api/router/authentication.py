@@ -118,3 +118,38 @@ async def get_me(current_user: Annotated[Users, Depends(get_current_user)]) -> U
         createdAt=current_user.createdAt,
         updatedAt=current_user.updatedAt
     )
+
+@router.post(
+    path="/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change user password",
+    description="Change the password of the currently authenticated user",
+    dependencies=[Depends(get_current_user)]
+)
+async def change_password(
+    old_password: str,
+    new_password: str,
+    current_user: Annotated[Users, Depends(get_current_user)]
+):
+    """
+    Change current user's password
+    
+    - **old_password**: Current password
+    - **new_password**: New password (min 8 characters)
+    
+    Requires authentication via Bearer token in Authorization header
+    
+    Returns a success message upon password change
+    """
+    if not verify_password(old_password, current_user.passwordHash):
+        raise AuthenticationError("Old password is incorrect")
+    
+    is_valid, error_msg = validate_password_strength(new_password)
+    if not is_valid:
+        raise ValidationError(error_msg)
+    
+    new_password_hash = get_password_hash(new_password)
+    current_user.passwordHash = new_password_hash
+    await current_user.save()
+    
+    return

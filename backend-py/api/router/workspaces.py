@@ -133,7 +133,7 @@ from pydantic import BaseModel
 
 
 class MemberAddedData(BaseModel):
-    userId: str
+    userEmail: str
     role: Literal["owner", "admin", "member"] = "member"
 
 @router.post(
@@ -164,10 +164,13 @@ async def add_workspace_member(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owners or admins can add members")
 
     for member_data in listed_member:
-        if any(member.userId == member_data.userId for member in workspace.members):
+        user = await Users.find_one(Users.email == member_data.userEmail)
+        if not user:
+            continue
+        if any(member.userId == user.id for member in workspace.members):
             continue  
         new_member = WorkspaceMember(
-            userId=member_data.userId,
+            userId=user.id,
             role=member_data.role
         )
         workspace.members.append(new_member)

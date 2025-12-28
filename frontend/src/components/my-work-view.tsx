@@ -1,354 +1,173 @@
-import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { format, isPast, isThisWeek, isToday, isTomorrow } from 'date-fns';
 import {
-  List,
-  Calendar as CalendarIcon,
-  Filter,
-  ChevronDown,
-  MoreHorizontal,
-  Clock,
-  AlertCircle,
-  ChevronLeft,
-  ChevronRight,
+    AlertCircle,
+    Calendar,
+    Calendar as CalendarIcon,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    Filter,
+    List,
+    Tag,
 } from 'lucide-react';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import React, { useMemo, useState } from 'react';
+import { useAuth } from '../context/auth-context';
+import { useMyTasks } from '../hooks/useMyTasks';
+import { Label, ProjectGetData, searchApi, TaskResponse } from '../lib/api';
 import { CardDetailModal } from './card-detail-modal';
-import { Task } from './task-card';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from './ui/select';
-import { taskApi, Task as ApiTask, labelsApi, TaskLabel, projectApi, Project } from '../lib/api';
+import { cn } from './ui/utils';
 
+type FilterType = 'all' | 'overdue' | 'this-week' | 'no-due-date';
 type ViewMode = 'list' | 'calendar';
-type QuickFilter = 'all' | 'overdue' | 'this-week' | 'no-due-date';
 
-interface MyTask extends Task {
-  projectId: string;
-  projectName: string;
-  projectColor: string;
-  status: string;
-  estimate?: number;
+interface MyWorkViewProps {
+  onNavigateToProject?: (projectId: string, projectTitle: string) => void;
 }
 
-export function MyWorkView() {
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+export function MyWorkView({ onNavigateToProject }: MyWorkViewProps) {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [tasks, setTasks] = useState<MyTask[]>([]);
-  const [availableLabels, setAvailableLabels] = useState<TaskLabel[]>([]);
-  const [selectedTask, setSelectedTask] = useState<MyTask | null>(null);
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   
   // Calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Load labels on mount so we can display label text in dropdown and badges
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await labelsApi.getMyLabels();
-        if (!mounted) return;
-        const list = (res.data || []).map((obj: any) => ({
-          id: obj.id || obj._id,
-          name: obj.text || obj.name || obj.title || obj.id,
-          color: obj.color || obj.color_code || 'bg-slate-400',
-        }));
-        console.log('MyWorkView: loaded labels', list);
-        setAvailableLabels(list);
-      } catch (err) {
-        console.warn('MyWorkView: failed to load labels', err);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
-
-  // Projects from server (use API `name` field)
-  const [apiProjects, setApiProjects] = React.useState<Project[]>([]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await projectApi.getMyProjects();
-        if (!mounted) return;
-        const list: Project[] = res.data || [];
-        setApiProjects(list.map(p => ({ ...p })));
-      } catch (err) {
-        console.warn('MyWorkView: failed to load projects', err);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
-
-  // Get unique labels (prefer server labels when available)
-  const allLabels = (availableLabels && availableLabels.length > 0)
-    ? availableLabels.map(l => l.name || (l as any).text || l.id || '')
-    : Array.from(new Set(tasks.flatMap(t => (t.labels || []).map((l: any) => (l && l.name) || (typeof l === 'string' ? l : '')))));
-
-  // Filter tasks
-  const filteredTasks = tasks.filter(task => {
-    // Project filter
-    if (selectedProject !== 'all' && task.projectId !== selectedProject) {
-      return false;
-    }
-
-    // Quick filter
-    if (quickFilter === 'overdue') {
-      if (!task.dueDate || new Date(task.dueDate) >= new Date()) {
-        return false;
-      }
-    } else if (quickFilter === 'this-week') {
-      if (!task.dueDate) return false;
-      const today = new Date();
-      const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const taskDate = new Date(task.dueDate);
-      if (taskDate < today || taskDate > weekFromNow) {
-        return false;
-      }
-    } else if (quickFilter === 'no-due-date') {
-      if (task.dueDate) return false;
-    }
-
-    // Label filter
-    if (selectedLabels.length > 0) {
-      const taskLabelNames = task.labels.map(l => l.name);
-      if (!selectedLabels.some(label => taskLabelNames.includes(label))) {
-        return false;
-      }
-    }
-
-    return true;
+  // Fetch projects for filter dropdown
+  const { data: projects = [] } = useQuery({
+    queryKey: ['my-projects', user?.id],
+    queryFn: async () => {
+      const response = await searchApi.getMyProjects();
+      return response.data as ProjectGetData[];
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user,
   });
 
-  // Group tasks by date or project
-  const groupedTasks = () => {
-    const groups: { [key: string]: MyTask[] } = {};
-    
-    filteredTasks.forEach(task => {
-      let groupKey = 'No Due Date';
-      
-      if (task.dueDate) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const taskDate = new Date(task.dueDate);
-        taskDate.setHours(0, 0, 0, 0);
+  // Fetch labels for filter dropdown
+  const { data: availableLabels = [] } = useQuery({
+    queryKey: ['my-labels', user?.id],
+    queryFn: async () => {
+      const response = await searchApi.getMyLabels();
+      return response.data as Label[];
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user,
+  });
 
-        if (taskDate < today) {
-          groupKey = 'Overdue';
-        } else if (taskDate.getTime() === today.getTime()) {
-          groupKey = 'Today';
-        } else if (taskDate.getTime() === tomorrow.getTime()) {
-          groupKey = 'Tomorrow';
-        } else if (taskDate < new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-          groupKey = 'This Week';
-        } else {
-          groupKey = 'Later';
-        }
-      }
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(task);
-    });
-
-    // Sort groups
-    const sortOrder = ['Overdue', 'Today', 'Tomorrow', 'This Week', 'Later', 'No Due Date'];
-    return sortOrder
-      .filter(key => groups[key])
-      .map(key => ({ group: key, tasks: groups[key] }));
-  };
-
-  const handleTaskClick = (task: MyTask) => {
-    setSelectedTask(task);
-    setIsModalOpen(true);
-  };
-
-  const handleUpdateTask = (updatedTask: Task) => {
-    setTasks(tasks.map(task => 
-      task.id === updatedTask.id 
-        ? { ...task, ...updatedTask }
-        : task
-    ));
-  };
-
-  const handleStatusChange = (taskId: string, newStatus: string) => {
-    setTasks(tasks.map(task =>
-      task.id === taskId ? { ...task, status: newStatus } : task
-    ));
-  };
-
-  const handleEstimateChange = (taskId: string, estimate: number) => {
-    setTasks(tasks.map(task =>
-      task.id === taskId ? { ...task, estimate } : task
-    ));
-  };
-
-  const isOverdue = (dueDate?: string) => {
-    if (!dueDate) return false;
-    return new Date(dueDate) < new Date();
-  };
-
-  const formatDueDate = (dueDate?: string) => {
-    if (!dueDate) return 'No due date';
-    const date = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const taskDate = new Date(date);
-    taskDate.setHours(0, 0, 0, 0);
-
-    if (taskDate.getTime() === today.getTime()) {
-      return 'Today';
+  // Fetch tasks with filters
+  const filters = useMemo(() => {
+    const f: any = {};
+    if (selectedProjectId !== 'all') f.projectId = selectedProjectId;
+    // Filter by label if selected
+    if (selectedLabels.length > 0) {
+      const selectedLabelId = availableLabels.find(l => l.text === selectedLabels[0])?.id || selectedLabels[0];
+      f.labelId = selectedLabelId;
     }
+    return f;
+  }, [selectedProjectId, selectedLabels, availableLabels]);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    if (taskDate.getTime() === tomorrow.getTime()) {
-      return 'Tomorrow';
-    }
+  const { data: tasks = [], isLoading } = useMyTasks(filters);
 
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  // Convert API Task to UI MyTask
-  const convertApiTask = (t: ApiTask, labelLookup?: TaskLabel[]): MyTask => {
-    const assignees = (t.assignees || []).map(a =>
-      typeof a === 'string' ? { name: a } : { id: (a as any).id, name: (a as any).name, avatar: (a as any).avatar }
-    );
-
-    const lookup = labelLookup || availableLabels || [];
-    const labels = (t.labels || []).map(l => {
-      if (typeof l === 'string') {
-        const found = lookup.find(x => x.id === l || x.name === l || (x as any).text === l);
-        return {
-          id: l,
-          name: found ? (found.name || (found as any).text || l) : l,
-          color: found ? found.color : 'bg-slate-400',
-        } as any;
-      }
-      const obj: any = l;
-      return { id: obj.id || obj._id, name: obj.text || obj.name || '', color: obj.color || obj.color_code || 'bg-slate-400' } as any;
-    });
-
-    const projectId = (t as any).projectId || (t as any).project_id || '';
-    const projectName = (t as any).projectName || (t as any).project_name || '';
-    const projectColor = (t as any).projectColor || (t as any).project_color || 'bg-slate-500';
-
-    const checklist = (t as any).checklist || { total: (t as any).checklists?.length || 0, completed: 0 };
-
-    return {
-      id: t.id,
-      title: t.title,
-      description: t.description || '',
-      assignees,
-      dueDate: (t as any).dueDate || (t as any).due_date,
-      labels,
-      checklist,
-      comments: t.comments || 0,
-      attachments: t.attachments || 0,
-      projectId,
-      projectName,
-      projectColor,
-      status: (t as any).status || 'To Do',
-      estimate: (t as any).estimate,
-    } as MyTask;
-  };
-
-  // Fetch tasks from API when filters change
-  useEffect(() => {
-    let isMounted = true;
-    const fetchTasks = async () => {
-      setLoading(true);
-      try {
-        const params: any = {};
-        if (selectedProject !== 'all') params.project_id = selectedProject;
-        if (quickFilter === 'overdue') params.overdue = true;
-        if (quickFilter === 'this-week') params.this_week = true;
-        if (quickFilter === 'no-due-date') params.no_due_date = true;
-
-        // Fetch available labels first so we can resolve label IDs to text
-        let labelLookup: TaskLabel[] = availableLabels || [];
-        try {
-          const labRes = await labelsApi.getMyLabels();
-          labelLookup = (labRes.data || []).map((obj: any) => ({
-            id: obj.id || obj._id,
-            name: obj.text || obj.name || obj.title || obj.id,
-            color: obj.color || obj.color_code || 'bg-slate-400',
-          }));
-          console.log('MyWorkView: fetched labels in fetchTasks', labelLookup);
-          setAvailableLabels(labelLookup);
-        } catch (e) {
-          // ignore label fetch errors
-        }
-
-        // Map selected label display name to label_id param (if any)
-        if (selectedLabels.length > 0) {
-          const selName = selectedLabels[0];
-          const sel = (labelLookup || []).find(l => l.name === selName || (l as any).text === selName || l.id === selName);
-          if (sel && sel.id) params.label_id = sel.id;
-          else params.label_id = selectedLabels[0];
-        }
-
-        const res = await taskApi.getMyTasks(params);
-        if (!isMounted) return;
-        let data = res.data || [];
-        // If labelLookup is empty, try to build it from task label objects returned in tasks
-        if ((!labelLookup || labelLookup.length === 0) && Array.isArray(data)) {
-          const mapById: Record<string, TaskLabel> = {};
-          data.forEach((t: any) => {
-            (t.labels || []).forEach((l: any) => {
-              if (l && typeof l !== 'string' && (l.id || l.text || l.name)) {
-                const id = l.id || l._id || l.name || l.text;
-                if (!mapById[id]) {
-                  mapById[id] = {
-                    id,
-                    name: l.text || l.name || id,
-                    color: l.color || l.color_code || 'bg-slate-400',
-                  };
-                }
-              }
-            });
-          });
-          const extracted = Object.values(mapById);
-          if (extracted.length > 0) {
-            labelLookup = extracted;
-            setAvailableLabels(extracted);
-          }
-        }
-
-        // convert using the label lookup so IDs map to text
-        setTasks(data.map((t: ApiTask) => convertApiTask(t, labelLookup as any)));
-      } catch (err) {
-        console.error('Failed to fetch my tasks', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  // Group tasks by status for display
+  const groupedTasks = useMemo(() => {
+    const groups = {
+      overdue: [] as TaskResponse[],
+      today: [] as TaskResponse[],
+      thisWeek: [] as TaskResponse[],
+      later: [] as TaskResponse[],
+      noDueDate: [] as TaskResponse[],
     };
 
-    fetchTasks();
-    return () => { isMounted = false; };
-  }, [selectedProject, selectedLabels, quickFilter]);
+    tasks.forEach((task) => {
+      if (!task.dueDate) {
+        groups.noDueDate.push(task);
+      } else {
+        const dueDate = new Date(task.dueDate);
+        
+        if (isPast(dueDate) && !isToday(dueDate)) {
+          groups.overdue.push(task);
+        } else if (isToday(dueDate)) {
+          groups.today.push(task);
+        } else if (isThisWeek(dueDate)) {
+          groups.thisWeek.push(task);
+        } else {
+          groups.later.push(task);
+        }
+      }
+    });
+
+    return groups;
+  }, [tasks]);
+
+  const taskCounts = useMemo(() => ({
+    all: tasks.length,
+    overdue: groupedTasks.overdue.length,
+    thisWeek: groupedTasks.thisWeek.length + groupedTasks.today.length,
+    noDueDate: groupedTasks.noDueDate.length,
+  }), [tasks, groupedTasks]);
+
+  // Filter tasks by selectedFilter for display
+  const displayedGroups = useMemo(() => {
+    if (selectedFilter === 'all') {
+      return groupedTasks;
+    }
+    
+    return {
+      overdue: selectedFilter === 'overdue' ? groupedTasks.overdue : [],
+      today: selectedFilter === 'all' || selectedFilter === 'this-week' ? groupedTasks.today : [],
+      thisWeek: selectedFilter === 'this-week' ? groupedTasks.thisWeek : [],
+      later: selectedFilter === 'all' ? groupedTasks.later : [],
+      noDueDate: selectedFilter === 'no-due-date' ? groupedTasks.noDueDate : [],
+    };
+  }, [selectedFilter, groupedTasks]);
+
+  // Filter by labels (client-side if multiple labels selected)
+  const filteredDisplayedGroups = useMemo(() => {
+    if (selectedLabels.length <= 1) {
+      return displayedGroups;
+    }
+    
+    const filterByLabels = (taskList: TaskResponse[]) => 
+      taskList.filter(task => 
+        selectedLabels.some(labelName => 
+          task.labels.some((l: any) => 
+            (typeof l === 'string' ? l : l.text || l.name) === labelName
+          )
+        )
+      );
+    
+    return {
+      overdue: filterByLabels(displayedGroups.overdue),
+      today: filterByLabels(displayedGroups.today),
+      thisWeek: filterByLabels(displayedGroups.thisWeek),
+      later: filterByLabels(displayedGroups.later),
+      noDueDate: filterByLabels(displayedGroups.noDueDate),
+    };
+  }, [displayedGroups, selectedLabels]);
 
   // Calendar functions
   const getDaysInMonth = (date: Date) => {
@@ -358,12 +177,11 @@ export function MyWorkView() {
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
-
     return { daysInMonth, startingDayOfWeek, year, month };
   };
 
   const getTasksForDate = (date: Date) => {
-    return filteredTasks.filter(task => {
+    return tasks.filter(task => {
       if (!task.dueDate) return false;
       const taskDate = new Date(task.dueDate);
       return (
@@ -372,21 +190,6 @@ export function MyWorkView() {
         taskDate.getDate() === date.getDate()
       );
     });
-  };
-
-  const getTaskColor = (task: MyTask) => {
-    // Check if task has an urgent/critical label
-    const urgentLabel = task.labels.find(l => 
-      l.name.toLowerCase() === 'urgent' || 
-      l.name.toLowerCase() === 'critical'
-    );
-    
-    if (urgentLabel) {
-      return urgentLabel.color;
-    }
-    
-    // Otherwise use project color
-    return task.projectColor;
   };
 
   const nextMonth = () => {
@@ -401,7 +204,7 @@ export function MyWorkView() {
     setCurrentDate(new Date());
   };
 
-  const isToday = (date: Date) => {
+  const isDateToday = (date: Date) => {
     const today = new Date();
     return (
       date.getDate() === today.getDate() &&
@@ -410,18 +213,51 @@ export function MyWorkView() {
     );
   };
 
-  return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 lg:px-6 py-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-slate-900">My Tasks</h1>
-            <p className="text-slate-600">
-              {filteredTasks.length} tasks assigned to you
-            </p>
-          </div>
+  const getProjectName = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || `Project ${projectId.slice(0, 8)}`;
+  };
 
+  const getProjectColor = (task: TaskResponse) => {
+    const labels = task.labels || [];
+    const hasUrgent = labels.some((l: any) => {
+      const name = typeof l === 'string' ? l : (l.text || l.name || '');
+      return name.toLowerCase().includes('urgent') || name.toLowerCase().includes('critical');
+    });
+    
+    if (hasUrgent) return 'bg-red-500';
+    return 'bg-blue-500';
+  };
+
+  const handleTaskClick = (task: TaskResponse) => {
+    setSelectedTask(task);
+    setIsModalOpen(true);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedProjectId('all');
+    setSelectedFilter('all');
+    setSelectedLabels([]);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 px-4 lg:px-8 py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">My Tasks</h1>
+            <p className="text-slate-600 mt-1">{taskCounts.all} tasks assigned to you</p>
+          </div>
+          
           {/* View Mode Toggle */}
           <div className="flex items-center gap-2">
             <div className="flex border border-slate-200 rounded-lg overflow-hidden">
@@ -429,9 +265,10 @@ export function MyWorkView() {
                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('list')}
-                className={`gap-2 ${
-                  viewMode === 'list' ? 'bg-blue-600 hover:bg-blue-700' : ''
-                }`}
+                className={cn(
+                  "gap-2 rounded-none",
+                  viewMode === 'list' && "bg-blue-600 hover:bg-blue-700"
+                )}
               >
                 <List className="w-4 h-4" />
                 List
@@ -440,9 +277,10 @@ export function MyWorkView() {
                 variant={viewMode === 'calendar' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('calendar')}
-                className={`gap-2 ${
-                  viewMode === 'calendar' ? 'bg-blue-600 hover:bg-blue-700' : ''
-                }`}
+                className={cn(
+                  "gap-2 rounded-none",
+                  viewMode === 'calendar' && "bg-blue-600 hover:bg-blue-700"
+                )}
               >
                 <CalendarIcon className="w-4 h-4" />
                 Calendar
@@ -451,19 +289,19 @@ export function MyWorkView() {
           </div>
         </div>
 
-        {/* Filters Bar */}
-        <div className="flex items-center gap-3 mt-4 flex-wrap">
+        {/* Filters */}
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Project Filter */}
-          <Select value={selectedProject} onValueChange={setSelectedProject}>
+          <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Projects</SelectItem>
-              {apiProjects.map(project => (
+              {projects.map(project => (
                 <SelectItem key={project.id} value={project.id}>
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full bg-slate-500`} />
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
                     {project.name}
                   </div>
                 </SelectItem>
@@ -472,33 +310,32 @@ export function MyWorkView() {
           </Select>
 
           {/* Quick Filters */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant={quickFilter === 'overdue' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setQuickFilter(quickFilter === 'overdue' ? 'all' : 'overdue')}
-              className={quickFilter === 'overdue' ? 'bg-red-500 hover:bg-red-600' : ''}
-            >
-              <AlertCircle className="w-4 h-4 mr-2" />
-              Overdue
-            </Button>
-            <Button
-              variant={quickFilter === 'this-week' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setQuickFilter(quickFilter === 'this-week' ? 'all' : 'this-week')}
-              className={quickFilter === 'this-week' ? 'bg-blue-600 hover:bg-blue-700' : ''}
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Due This Week
-            </Button>
-            <Button
-              variant={quickFilter === 'no-due-date' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setQuickFilter(quickFilter === 'no-due-date' ? 'all' : 'no-due-date')}
-              className={quickFilter === 'no-due-date' ? 'bg-blue-600 hover:bg-blue-700' : ''}
-            >
-              No Due Date
-            </Button>
+          <div className="flex gap-2">
+            <FilterButton
+              active={selectedFilter === 'all'}
+              onClick={() => setSelectedFilter('all')}
+              label="All"
+              count={taskCounts.all}
+            />
+            <FilterButton
+              active={selectedFilter === 'overdue'}
+              onClick={() => setSelectedFilter('overdue')}
+              label="Overdue"
+              count={taskCounts.overdue}
+              variant="danger"
+            />
+            <FilterButton
+              active={selectedFilter === 'this-week'}
+              onClick={() => setSelectedFilter('this-week')}
+              label="Due This Week"
+              count={taskCounts.thisWeek}
+            />
+            <FilterButton
+              active={selectedFilter === 'no-due-date'}
+              onClick={() => setSelectedFilter('no-due-date')}
+              label="No Due Date"
+              count={taskCounts.noDueDate}
+            />
           </div>
 
           {/* Label Filter */}
@@ -515,34 +352,39 @@ export function MyWorkView() {
             <DropdownMenuContent className="w-56">
               <DropdownMenuLabel>Filter by Label</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {(availableLabels && availableLabels.length > 0 ? availableLabels.map(l => l.name || (l as any).text || l.id || '') : allLabels).map(label => (
+              {availableLabels.map(label => (
                 <DropdownMenuCheckboxItem
-                  key={label}
-                  checked={selectedLabels.includes(label)}
+                  key={label.id}
+                  checked={selectedLabels.includes(label.text)}
                   onCheckedChange={(checked) => {
                     if (checked) {
-                      setSelectedLabels([...selectedLabels, label]);
+                      setSelectedLabels([...selectedLabels, label.text]);
                     } else {
-                      setSelectedLabels(selectedLabels.filter(l => l !== label));
+                      setSelectedLabels(selectedLabels.filter(l => l !== label.text));
                     }
                   }}
                 >
-                  {label}
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded" 
+                      style={{ backgroundColor: label.color || '#6b7280' }} 
+                    />
+                    {label.text}
+                  </div>
                 </DropdownMenuCheckboxItem>
               ))}
+              {availableLabels.length === 0 && (
+                <div className="px-2 py-1 text-sm text-slate-500">No labels available</div>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
           {/* Clear Filters */}
-          {(selectedProject !== 'all' || quickFilter !== 'all' || selectedLabels.length > 0) && (
+          {(selectedProjectId !== 'all' || selectedFilter !== 'all' || selectedLabels.length > 0) && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setSelectedProject('all');
-                setQuickFilter('all');
-                setSelectedLabels([]);
-              }}
+              onClick={handleClearFilters}
             >
               Clear Filters
             </Button>
@@ -551,119 +393,131 @@ export function MyWorkView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 lg:p-6">
-        {viewMode === 'list' ? (
-          <div className="max-w-5xl mx-auto space-y-6">
-            {groupedTasks().map(({ group, tasks: groupTasks }) => (
-              <div key={group} className="space-y-3">
-                <h3 className="text-slate-900 flex items-center gap-2">
-                  {group}
-                  <span className="text-slate-500">({groupTasks.length})</span>
-                </h3>
-                <div className="space-y-2">
-                  {groupTasks.map(task => (
-                    <div
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6">
+          {viewMode === 'list' ? (
+            <div className="space-y-8">
+              {/* Overdue Section */}
+              {filteredDisplayedGroups.overdue.length > 0 && (
+                <TaskSection
+                  title="Overdue"
+                  count={filteredDisplayedGroups.overdue.length}
+                  icon={<AlertCircle className="w-5 h-5 text-red-600" />}
+                  variant="danger"
+                >
+                  {filteredDisplayedGroups.overdue.map((task) => (
+                    <TaskItem
                       key={task.id}
-                      className="group bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition-all"
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* Main Content */}
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleTaskClick(task)}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-2 h-2 rounded-full ${task.projectColor}`} />
-                            <span className="text-slate-500">{task.projectName}</span>
-                            <Badge variant="outline" className="text-slate-600">
-                              {task.status}
-                            </Badge>
-                          </div>
-                          <h4 className="text-slate-900 mb-2">{task.title}</h4>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {task.dueDate && (
-                              <div
-                                className={`flex items-center gap-1 ${
-                                  isOverdue(task.dueDate)
-                                    ? 'text-red-600'
-                                    : 'text-slate-600'
-                                }`}
-                              >
-                                <CalendarIcon className="w-4 h-4" />
-                                <span>{formatDueDate(task.dueDate)}</span>
-                              </div>
-                            )}
-                            {task.labels.map((label, idx) => (
-                              <Badge
-                                key={idx}
-                                className={`${label.color} text-white border-0`}
-                              >
-                                {label.name}
-                              </Badge>
-                            ))}
-                            {task.estimate && (
-                              <span className="text-slate-500">
-                                {task.estimate}h
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Quick Actions */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel className="text-slate-600">
-                              Change Status
-                            </DropdownMenuLabel>
-                            {['To Do', 'In Progress', 'Review', 'Done'].map(status => (
-                              <DropdownMenuItem
-                                key={status}
-                                onClick={() => handleStatusChange(task.id, status)}
-                              >
-                                {status}
-                              </DropdownMenuItem>
-                            ))}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                const estimate = prompt('Set estimate (hours):', task.estimate?.toString() || '');
-                                if (estimate) {
-                                  handleEstimateChange(task.id, parseInt(estimate));
-                                }
-                              }}
-                            >
-                              Set Estimate
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
+                      task={task}
+                      projectName={getProjectName(task.projectId)}
+                      labels={availableLabels}
+                      onClick={() => handleTaskClick(task)}
+                      onProjectClick={() => onNavigateToProject?.(task.projectId, getProjectName(task.projectId))}
+                    />
                   ))}
-                </div>
-              </div>
-            ))}
+                </TaskSection>
+              )}
 
-            {filteredTasks.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-slate-600">No tasks found</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Calendar View */
-          <div className="max-w-7xl mx-auto">
+              {/* Today Section */}
+              {filteredDisplayedGroups.today.length > 0 && (
+                <TaskSection
+                  title="Today"
+                  count={filteredDisplayedGroups.today.length}
+                  icon={<Clock className="w-5 h-5 text-orange-600" />}
+                >
+                  {filteredDisplayedGroups.today.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      projectName={getProjectName(task.projectId)}
+                      labels={availableLabels}
+                      onClick={() => handleTaskClick(task)}
+                      onProjectClick={() => onNavigateToProject?.(task.projectId, getProjectName(task.projectId))}
+                    />
+                  ))}
+                </TaskSection>
+              )}
+
+              {/* This Week Section */}
+              {filteredDisplayedGroups.thisWeek.length > 0 && (
+                <TaskSection
+                  title="This Week"
+                  count={filteredDisplayedGroups.thisWeek.length}
+                  icon={<Calendar className="w-5 h-5 text-slate-600" />}
+                >
+                  {filteredDisplayedGroups.thisWeek.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      projectName={getProjectName(task.projectId)}
+                      labels={availableLabels}
+                      onClick={() => handleTaskClick(task)}
+                      onProjectClick={() => onNavigateToProject?.(task.projectId, getProjectName(task.projectId))}
+                    />
+                  ))}
+                </TaskSection>
+              )}
+
+              {/* Later Section */}
+              {filteredDisplayedGroups.later.length > 0 && (
+                <TaskSection
+                  title="Later"
+                  count={filteredDisplayedGroups.later.length}
+                  icon={<Clock className="w-5 h-5 text-slate-600" />}
+                >
+                  {filteredDisplayedGroups.later.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      projectName={getProjectName(task.projectId)}
+                      labels={availableLabels}
+                      onClick={() => handleTaskClick(task)}
+                      onProjectClick={() => onNavigateToProject?.(task.projectId, getProjectName(task.projectId))}
+                    />
+                  ))}
+                </TaskSection>
+              )}
+
+              {/* No Due Date Section */}
+              {filteredDisplayedGroups.noDueDate.length > 0 && (
+                <TaskSection
+                  title="No Due Date"
+                  count={filteredDisplayedGroups.noDueDate.length}
+                  icon={<Tag className="w-5 h-5 text-slate-400" />}
+                >
+                  {filteredDisplayedGroups.noDueDate.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      projectName={getProjectName(task.projectId)}
+                      labels={availableLabels}
+                      onClick={() => handleTaskClick(task)}
+                      onProjectClick={() => onNavigateToProject?.(task.projectId, getProjectName(task.projectId))}
+                    />
+                  ))}
+                </TaskSection>
+              )}
+
+              {tasks.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No tasks found</h3>
+                  <p className="text-slate-600">
+                    {selectedFilter === 'all' 
+                      ? "You don't have any tasks assigned to you."
+                      : "No tasks match the selected filter."}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Calendar View */
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               {/* Calendar Header */}
               <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                <h2 className="text-slate-900">
+                <h2 className="text-xl font-bold text-slate-900">
                   {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </h2>
                 <div className="flex items-center gap-2">
@@ -684,7 +538,7 @@ export function MyWorkView() {
                 {/* Day headers */}
                 <div className="grid grid-cols-7 gap-2 mb-2">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="text-center text-slate-600 py-2">
+                    <div key={day} className="text-center text-sm font-medium text-slate-600 py-2">
                       {day}
                     </div>
                   ))}
@@ -707,18 +561,22 @@ export function MyWorkView() {
                     for (let day = 1; day <= daysInMonth; day++) {
                       const date = new Date(year, month, day);
                       const tasksForDay = getTasksForDate(date);
-                      const isTodayDate = isToday(date);
+                      const isTodayDate = isDateToday(date);
 
                       days.push(
                         <div
                           key={day}
-                          className={`aspect-square p-2 border rounded-lg ${
+                          className={cn(
+                            "aspect-square p-2 border rounded-lg transition-colors overflow-hidden",
                             isTodayDate
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-slate-200 bg-white hover:bg-slate-50'
-                          } transition-colors overflow-hidden`}
+                              ? "border-blue-500 bg-blue-50"
+                              : "border-slate-200 bg-white hover:bg-slate-50"
+                          )}
                         >
-                          <div className={`mb-1 ${isTodayDate ? 'text-blue-600' : 'text-slate-900'}`}>
+                          <div className={cn(
+                            "text-sm font-medium mb-1",
+                            isTodayDate ? "text-blue-600" : "text-slate-900"
+                          )}>
                             {day}
                           </div>
                           <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100% - 1.5rem)' }}>
@@ -726,15 +584,17 @@ export function MyWorkView() {
                               <button
                                 key={task.id}
                                 onClick={() => handleTaskClick(task)}
-                                className={`w-full text-left px-2 py-1 rounded text-white hover:opacity-80 transition-opacity ${getTaskColor(task)}`}
-                                title={`${task.title} - ${task.projectName}`}
+                                className={cn(
+                                  "w-full text-left px-2 py-1 rounded text-white text-xs hover:opacity-80 transition-opacity truncate",
+                                  getProjectColor(task)
+                                )}
+                                title={`${task.title} - ${getProjectName(task.projectId)}`}
                               >
-                                <div className="truncate text-white">{task.title}</div>
-                                <div className="truncate text-white/90">{task.projectName}</div>
+                                {task.title}
                               </button>
                             ))}
                             {tasksForDay.length > 3 && (
-                              <div className="text-slate-600 px-2">
+                              <div className="text-xs text-slate-600 px-2">
                                 +{tasksForDay.length - 3} more
                               </div>
                             )}
@@ -748,17 +608,210 @@ export function MyWorkView() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Task Detail Modal */}
-      <CardDetailModal
-        task={selectedTask}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onUpdate={handleUpdateTask}
-      />
+      {selectedTask && (
+        <CardDetailModal
+          task={selectedTask}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedTask(null);
+          }}
+          onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+            setIsModalOpen(false);
+            setSelectedTask(null);
+          }}
+          onDelete={() => {
+            queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+            setIsModalOpen(false);
+            setSelectedTask(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Helper Components
+interface FilterButtonProps {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  variant?: 'default' | 'danger';
+}
+
+function FilterButton({ active, onClick, label, count, variant = 'default' }: FilterButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2 rounded-lg font-medium transition-colors text-sm",
+        active
+          ? variant === 'danger'
+            ? "bg-red-100 text-red-700 border border-red-300"
+            : "bg-blue-100 text-blue-700 border border-blue-300"
+          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+      )}
+    >
+      {label} <span className="ml-1">({count})</span>
+    </button>
+  );
+}
+
+interface TaskSectionProps {
+  title: string;
+  count: number;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  variant?: 'default' | 'danger';
+}
+
+function TaskSection({ title, count, icon, children, variant = 'default' }: TaskSectionProps) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        {icon}
+        <h2 className={cn(
+          "text-xl font-bold",
+          variant === 'danger' ? "text-red-600" : "text-slate-900"
+        )}>
+          {title}
+        </h2>
+        <span className="text-slate-500 text-sm">({count})</span>
+      </div>
+      <div className="space-y-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+interface TaskItemProps {
+  task: TaskResponse;
+  projectName: string;
+  labels: Label[];
+  onClick: () => void;
+  onProjectClick: () => void;
+}
+
+function TaskItem({ task, projectName, labels: availableLabels, onClick, onProjectClick }: TaskItemProps) {
+  const isOverdue = task.dueDate && isPast(new Date(task.dueDate)) && !isToday(new Date(task.dueDate));
+  
+  // Resolve label names from IDs
+  const resolvedLabels = useMemo(() => {
+    return (task.labels || []).map((l: any) => {
+      if (typeof l === 'string') {
+        const found = availableLabels.find(al => al.id === l);
+        return { text: found?.text || l, color: found?.color || '#6b7280' };
+      }
+      return { text: l.text || l.name || '', color: l.color || '#6b7280' };
+    });
+  }, [task.labels, availableLabels]);
+
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        "bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer",
+        isOverdue ? "border-l-4 border-l-red-500" : "border-slate-200"
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-slate-900 mb-2 truncate">
+            {task.title}
+          </h3>
+          
+          {task.description && (
+            <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+              {task.description}
+            </p>
+          )}
+          
+          <div className="flex items-center gap-4 text-xs text-slate-600 flex-wrap">
+            {/* Project Name */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onProjectClick();
+              }}
+              className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+            >
+              <span className="text-blue-500">●</span>
+              <span>{projectName}</span>
+            </button>
+
+            {/* Due Date */}
+            {task.dueDate && (
+              <div className={cn(
+                "flex items-center gap-1",
+                isOverdue && "text-red-600 font-semibold"
+              )}>
+                <Calendar className="w-3 h-3" />
+                <span>
+                  {isToday(new Date(task.dueDate))
+                    ? 'Today'
+                    : isTomorrow(new Date(task.dueDate))
+                    ? 'Tomorrow'
+                    : format(new Date(task.dueDate), 'MMM dd')}
+                </span>
+              </div>
+            )}
+
+            {/* Labels */}
+            {resolvedLabels.length > 0 && (
+              <div className="flex gap-1">
+                {resolvedLabels.slice(0, 2).map((label, idx) => (
+                  <Badge 
+                    key={idx} 
+                    variant="outline" 
+                    className="text-xs px-2 py-0"
+                    style={{ borderColor: label.color, color: label.color }}
+                  >
+                    {label.text.length > 10 ? label.text.slice(0, 10) + '...' : label.text}
+                  </Badge>
+                ))}
+                {resolvedLabels.length > 2 && (
+                  <span className="text-slate-400">+{resolvedLabels.length - 2}</span>
+                )}
+              </div>
+            )}
+
+            {/* Checklist Progress */}
+            {task.checklists && task.checklists.length > 0 && (
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>
+                  {task.checklists.filter((c: any) => c.checked).length}/{task.checklists.length}
+                </span>
+              </div>
+            )}
+
+            {/* Assignees count */}
+            {task.assignees && task.assignees.length > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="text-slate-500">👥</span>
+                <span>{task.assignees.length} assignee{task.assignees.length > 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status Badge */}
+        <div>
+          {isOverdue && (
+            <Badge variant="destructive" className="text-xs">
+              Overdue
+            </Badge>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

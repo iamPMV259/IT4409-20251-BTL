@@ -1,30 +1,33 @@
-import React, { useState } from 'react';
 import {
-  LayoutDashboard,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  Bell,
-  Search,
-  CheckSquare,
+    Bell,
+    CheckSquare,
+    KeyRound,
+    LayoutDashboard,
+    LogOut,
+    Menu,
+    X,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import { useAuth } from '../context/auth-context';
+import { ChangePasswordDialog } from './change-password-dialog';
+import { GlobalSearch } from './global-search';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
 import { Button } from './ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
 interface MainLayoutProps {
   children: React.ReactNode;
   currentView: string;
   onNavigate: (view: string) => void;
   onLogout: () => void;
+  onOpenProject?: (projectId: string, projectName: string) => void;
 }
 
 export function MainLayout({
@@ -32,8 +35,34 @@ export function MainLayout({
   currentView,
   onNavigate,
   onLogout,
+  onOpenProject,
 }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const { user } = useAuth();
+  
+  // Tạo chữ cái viết tắt từ tên user
+  const getUserInitials = () => {
+    if (!user?.name) return 'U';
+    const names = user.name.trim().split(' ');
+    if (names.length === 1) return names[0].charAt(0).toUpperCase();
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+  };
+
+  const handleNavigateToProject = (projectId: string, projectName: string) => {
+    if (onOpenProject) {
+      onOpenProject(projectId, projectName);
+    }
+  };
+
+  const handleNavigateToTask = (taskId: string, projectId: string) => {
+    // Navigate to project board view, then open task modal
+    // This will be handled by parent component
+    if (onOpenProject) {
+      // For now, just open the project - task modal will need URL parameter
+      onOpenProject(projectId, 'Project');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -105,18 +134,6 @@ export function MainLayout({
               <CheckSquare className="w-5 h-5" />
               <span>My Tasks</span>
             </button>
-
-            <button
-              onClick={() => onNavigate('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                currentView === 'settings'
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Settings className="w-5 h-5" />
-              <span>Settings</span>
-            </button>
           </nav>
 
           {/* User Profile */}
@@ -125,23 +142,23 @@ export function MainLayout({
               <DropdownMenuTrigger asChild>
                 <button className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors">
                   <Avatar className="w-10 h-10">
-                    <AvatarImage src="" alt="User" />
+                    <AvatarImage src={user?.avatarUrl || ''} alt={user?.name || 'User'} />
                     <AvatarFallback className="bg-blue-600 text-white">
-                      JD
+                      {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
-                    <p className="text-slate-900">John Doe</p>
-                    <p className="text-slate-500">john@example.com</p>
+                    <p className="text-sm font-medium text-slate-900">{user?.name || 'User'}</p>
+                    <p className="text-xs text-slate-500 truncate">{user?.email || ''}</p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onNavigate('settings')}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
+                <DropdownMenuItem onClick={() => setIsChangePasswordOpen(true)}>
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Đổi mật khẩu
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout} className="text-red-600">
@@ -166,14 +183,10 @@ export function MainLayout({
           </button>
 
           <div className="flex-1 max-w-2xl mx-auto px-4 lg:px-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search tasks, projects..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
+            <GlobalSearch 
+              onNavigateToProject={handleNavigateToProject}
+              onNavigateToTask={handleNavigateToTask}
+            />
           </div>
 
           <div className="flex items-center gap-2">
@@ -187,9 +200,9 @@ export function MainLayout({
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2">
                     <Avatar className="w-8 h-8">
-                      <AvatarImage src="" alt="User" />
+                      <AvatarImage src={user?.avatarUrl || ''} alt={user?.name || 'User'} />
                       <AvatarFallback className="bg-blue-600 text-white">
-                        JD
+                        {getUserInitials()}
                       </AvatarFallback>
                     </Avatar>
                   </button>
@@ -197,9 +210,9 @@ export function MainLayout({
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onNavigate('settings')}>
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                  <DropdownMenuItem onClick={() => setIsChangePasswordOpen(true)}>
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Đổi mật khẩu
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout} className="text-red-600">
@@ -215,6 +228,12 @@ export function MainLayout({
         {/* Content */}
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
+
+      {/* Change Password Dialog */}
+      <ChangePasswordDialog 
+        isOpen={isChangePasswordOpen} 
+        onClose={() => setIsChangePasswordOpen(false)} 
+      />
     </div>
   );
 }
