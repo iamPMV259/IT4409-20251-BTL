@@ -1,26 +1,26 @@
-import React, { useState } from 'react';
 import {
-  LayoutDashboard,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  Bell,
-  Search,
-  CheckSquare,
+    Bell,
+    CheckSquare,
+    KeyRound,
+    LayoutDashboard,
+    LogOut,
+    Menu,
+    X,
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
-import { Button } from './ui/button';
-import { GlobalSearch } from './global-search';
+import React, { useState } from 'react';
 import { useAuth } from '../context/auth-context';
+import { ChangePasswordDialog } from './change-password-dialog';
+import { GlobalSearch } from './global-search';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Button } from './ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -38,6 +38,7 @@ export function MainLayout({
   onOpenProject,
 }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const { user } = useAuth();
   
   // Tạo chữ cái viết tắt từ tên user
@@ -133,18 +134,6 @@ export function MainLayout({
               <CheckSquare className="w-5 h-5" />
               <span>My Tasks</span>
             </button>
-
-            <button
-              onClick={() => onNavigate('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                currentView === 'settings'
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Settings className="w-5 h-5" />
-              <span>Settings</span>
-            </button>
           </nav>
 
           {/* User Profile */}
@@ -167,9 +156,9 @@ export function MainLayout({
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onNavigate('settings')}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
+                <DropdownMenuItem onClick={() => setIsChangePasswordOpen(true)}>
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Đổi mật khẩu
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout} className="text-red-600">
@@ -221,9 +210,9 @@ export function MainLayout({
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onNavigate('settings')}>
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                  <DropdownMenuItem onClick={() => setIsChangePasswordOpen(true)}>
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Đổi mật khẩu
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout} className="text-red-600">
@@ -239,6 +228,12 @@ export function MainLayout({
         {/* Content */}
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
+
+      {/* Change Password Dialog */}
+      <ChangePasswordDialog 
+        isOpen={isChangePasswordOpen} 
+        onClose={() => setIsChangePasswordOpen(false)} 
+      />
     </div>
   );
 }

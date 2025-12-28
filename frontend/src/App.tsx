@@ -1,20 +1,20 @@
 // src/App.tsx
-import React, { useState } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { LoginPage } from './components/login-page';
-import { SignUpPage } from './components/signup-page';
-import { ForgotPasswordPage } from './components/forgot-password-page';
-import { MainLayout } from './components/main-layout';
+import { useState } from 'react';
 import { DashboardView } from './components/dashboard-view';
-import { ProjectView } from './components/project-view';
+import { ForgotPasswordPage } from './components/forgot-password-page';
+import { LoginPage } from './components/login-page';
+import { MainLayout } from './components/main-layout';
 import { MyWorkView } from './components/my-work-view';
+import { ProjectView } from './components/project-view';
+import { SignUpPage } from './components/signup-page';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './context/auth-context';
 import { SocketProvider } from './context/socket-context';
 import { queryClient } from './lib/query-client';
 type AuthPage = 'login' | 'signup' | 'forgot-password';
-type AppView = 'dashboard' | 'board' | 'my-work' | 'settings';
+type AppView = 'dashboard' | 'board' | 'my-work';
 
 // Tách MainApp ra để dùng được hook useAuth
 function MainApp() {
@@ -26,7 +26,7 @@ function MainApp() {
 
   // ... logic xử lý view giữ nguyên ...
   const handleNavigate = (view: string) => {
-    if (view === 'dashboard' || view === 'my-work' || view === 'settings') {
+    if (view === 'dashboard' || view === 'my-work') {
       setCurrentView(view as AppView);
       setCurrentProjectId(null);
     }
@@ -62,7 +62,6 @@ function MainApp() {
       {currentView === 'board' && currentProjectId && (
         <ProjectView projectId={currentProjectId} projectTitle={currentProjectTitle} onBack={handleBackToDashboard} />
       )}
-      {/* Settings giữ nguyên */}
     </MainLayout>
   );
 }

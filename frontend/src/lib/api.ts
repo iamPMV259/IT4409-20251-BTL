@@ -255,6 +255,11 @@ export const authApi = {
   
   getMe: () => 
     api.get<UserResponse>('/auth/me'),
+    
+  changePassword: (oldPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', null, {
+      params: { old_password: oldPassword, new_password: newPassword }
+    }),
 };
 
 export const workspaceApi = {
