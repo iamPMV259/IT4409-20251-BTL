@@ -86,7 +86,9 @@ const startServer = async () => {
         }
 
         const dbName = process.env.MONGO_DB_NAME || 'project_management';
-        const mongoUri = `${process.env.MONGO_URI}/${dbName}`;
+        // Remove trailing slash from MONGO_URI if present to avoid double slashes
+        const baseUri = process.env.MONGO_URI.replace(/\/+$/, '');
+        const mongoUri = `${baseUri}/${dbName}`;
         
         console.log('Connecting to MongoDB...');
         // Hide password log
