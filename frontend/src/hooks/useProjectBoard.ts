@@ -36,7 +36,7 @@ export function useProjectBoard(projectId: string) {
       return response.data.data as BoardData;
     },
     enabled: !!projectId,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 0, // Always fetch fresh data when navigating back
   });
 
   // Prefetch project labels khi load board

@@ -112,10 +112,12 @@ export function BoardView({
           break;
 
         case "server:column_created":
+          // Backend có typo: columId thay vì columnId
+          const newColumnId = data.columnId || data.columId;
           setColumns((prev) =>
-            prev.some((c) => c.id === data.columnId)
+            prev.some((c) => c.id === newColumnId)
               ? prev
-              : [...prev, { id: data.columnId, title: data.title, tasks: [] }]
+              : [...prev, { id: newColumnId, title: data.title, tasks: [] }]
           );
           break;
         case "server:column_updated":
@@ -264,14 +266,9 @@ export function BoardView({
   const handleAddColumn = async () => {
     if (!newColumnTitle.trim()) return;
     try {
-      const { data } = await columnApi.create(projectId, newColumnTitle);
+      await columnApi.create(projectId, newColumnTitle);
       toast.success("Đã tạo cột mới");
-      // UI update (fallback nếu socket chậm)
-      const newCol = data.data
-        ? { id: data.data.id, title: data.data.title, tasks: [] }
-        : null;
-      if (newCol) setColumns((prev) => [...prev, newCol]);
-
+      // Don't update UI immediately - let socket handle it to prevent duplicates
       setNewColumnTitle("");
       setIsAddingColumn(false);
     } catch (error) {

@@ -299,14 +299,19 @@ export function CardDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-white">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-white" hideCloseButton>
         <DialogHeader className="absolute opacity-0 pointer-events-none h-0 overflow-hidden">
           <DialogTitle>{title || "Chi tiết công việc"}</DialogTitle>
           <DialogDescription>Xem và chỉnh sửa thông tin chi tiết công việc</DialogDescription>
         </DialogHeader>
 
         <div className="h-24 bg-gradient-to-r from-blue-600 to-indigo-600 w-full relative">
-           <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-white hover:bg-white/20" onClick={handleClose}>
+           <Button 
+             variant="ghost" 
+             size="icon" 
+             className="absolute top-2 right-2 bg-red-500 text-white hover:bg-red-600 rounded-full w-8 h-8 shadow-lg" 
+             onClick={handleClose}
+           >
              <X className="w-5 h-5"/>
            </Button>
         </div>
@@ -318,6 +323,7 @@ export function CardDetailModal({
             <div className="flex gap-3">
               <CheckSquare className="w-6 h-6 text-blue-600 mt-2 shrink-0" />
               <div className="w-full">
+                <h3 className="font-semibold text-slate-700 mb-2">Tiêu đề</h3>
                 <Input 
                    value={title} onChange={e => setTitle(e.target.value)}
                    className="text-xl font-bold border-transparent hover:border-slate-200 focus:border-blue-500 px-2 -ml-2 rounded"
@@ -332,11 +338,9 @@ export function CardDetailModal({
                         <Badge 
                           key={lId || idx} 
                           style={{backgroundColor: labelObj?.color || '#10b981'}} 
-                          className="text-white hover:brightness-90 px-2 py-1 cursor-pointer flex items-center gap-1"
-                          onClick={() => handleToggleLabel(lId)}
+                          className="text-white px-2 py-1 flex items-center gap-1"
                         >
                           {labelObj?.text || "Label"}
-                          <X className="w-3 h-3 hover:bg-white/20 rounded" />
                         </Badge>
                       );
                    })}
@@ -346,9 +350,8 @@ export function CardDetailModal({
                       const member = projectMembers.find(m => m.user?.id === uId || m.user_id === uId);
                       const name = member?.user?.name || member?.name || "User";
                       return (
-                         <div key={uId || idx} className="h-6 px-2 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1 text-xs font-medium cursor-pointer hover:bg-blue-100" onClick={() => handleToggleAssignee(uId)}>
+                         <div key={uId || idx} className="h-6 px-2 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1 text-xs font-medium">
                             <User className="w-3 h-3"/> {name}
-                            <X className="w-3 h-3 hover:bg-blue-200 rounded" />
                          </div>
                       );
                    })}
@@ -475,10 +478,15 @@ export function CardDetailModal({
                         const uName = m.user?.name || m.name || uId;
                         const isSelected = tempAssignees.includes(uId);
                         return (
-                        <div key={uId} onClick={() => handleToggleAssignee(uId)} className={`flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded text-sm ${isSelected ? 'bg-blue-50 text-blue-600' : ''}`}>
+                        <div key={uId} onClick={() => handleToggleAssignee(uId)} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded text-sm">
+                           <input 
+                             type="checkbox" 
+                             checked={isSelected} 
+                             onChange={() => {}} 
+                             className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                           />
                            <div className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">{uName.charAt(0)}</div>
                            <span className="truncate flex-1">{uName}</span>
-                           {isSelected && <CheckSquare className="w-3 h-3"/>}
                         </div>
                      )})}
                   </div>
@@ -496,10 +504,15 @@ export function CardDetailModal({
                      {projectLabels.map(l => {
                         const isSelected = tempLabels.includes(l.id);
                         return (
-                        <div key={l.id} onClick={() => handleToggleLabel(l.id)} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer rounded mb-1">
-                           <div className="w-full h-8 rounded flex items-center px-2 text-white text-xs font-medium" style={{backgroundColor: l.color || '#ccc'}}>
+                        <div key={l.id} onClick={() => handleToggleLabel(l.id)} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded mb-1">
+                           <input 
+                             type="checkbox" 
+                             checked={isSelected} 
+                             onChange={() => {}} 
+                             className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                           />
+                           <div className="flex-1 h-8 rounded flex items-center px-3 text-white text-xs font-medium" style={{backgroundColor: l.color || '#ccc'}}>
                               {l.text}
-                              {isSelected && <CheckSquare className="w-4 h-4 ml-auto text-white"/>}
                            </div>
                         </div>
                      )})}

@@ -705,13 +705,16 @@ function TaskItem({ task, projectName, labels: availableLabels, onClick, onProje
   
   // Resolve label names from IDs
   const resolvedLabels = useMemo(() => {
-    return (task.labels || []).map((l: any) => {
-      if (typeof l === 'string') {
-        const found = availableLabels.find(al => al.id === l);
-        return { text: found?.text || l, color: found?.color || '#6b7280' };
-      }
-      return { text: l.text || l.name || '', color: l.color || '#6b7280' };
-    });
+    return (task.labels || [])
+      .map((l: any) => {
+        if (typeof l === 'string') {
+          const found = availableLabels.find(al => al.id === l);
+          // Chỉ hiển thị label nếu tìm thấy, ẩn ID
+          return found ? { text: found.text, color: found.color } : null;
+        }
+        return { text: l.text || l.name || '', color: l.color || '#6b7280' };
+      })
+      .filter(Boolean); // Loại bỏ các label null
   }, [task.labels, availableLabels]);
 
   return (
