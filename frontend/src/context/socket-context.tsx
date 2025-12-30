@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { useAuth } from './auth-context';
 
@@ -13,8 +13,11 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
-// [FIXED] Thêm 's' vào projects để khớp với Backend FastAPI
-const WS_BASE_URL = 'ws://131.153.239.187:8345/ws/projects';
+// Load WebSocket URL from environment variables
+const WS_PROTOCOL = import.meta.env.VITE_WS_PROTOCOL || 'ws';
+const HOST = import.meta.env.VITE_HOST || 'localhost';
+const PORT = import.meta.env.VITE_PORT || '8345';
+const WS_BASE_URL = `${WS_PROTOCOL}://${HOST}:${PORT}/ws/projects`;
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
