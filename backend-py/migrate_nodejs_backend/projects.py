@@ -16,6 +16,8 @@ from utils import base64_to_uuid
 
 logger = get_logger("nodejs-backend-projects")
 
+BASE_URL = nodejs_backend_config.domain if len(nodejs_backend_config.domain) > 0 else f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
+
 
 def _is_uuid(value: str) -> bool:
     import re
@@ -140,7 +142,7 @@ import json
 
 
 async def get_project(project_id: str, token: str) -> ProjectDetailResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -241,7 +243,7 @@ class ProjectUpdateRequest(BaseModel):
 
 
 async def update_project(project_id: str, update_data: ProjectUpdateRequest, token: str) -> ProjectUpdateResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -276,7 +278,7 @@ class ProjectDeleteResponse(BaseModel):
 
 
 async def delete_project(project_id: str, token: str) -> ProjectDeleteResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -392,7 +394,7 @@ class ProjectBoardResponse(BaseModel):
 
 
 async def get_project_board(project_id: str, token: str) -> ProjectBoardResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}/board"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}/board"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -493,7 +495,7 @@ class ProjectAddMemberResponse(BaseModel):
 
 
 async def add_project_member(project_id: str, member_email: List[str], token: str) -> ProjectAddMemberResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}/members"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}/members"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -561,7 +563,7 @@ class ProjectColumnCreatedResponse(BaseModel):
 
 
 async def create_project_columns(project_id: str, column_title: str, token: str) -> ProjectColumnCreatedResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}/columns"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}/columns"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -657,7 +659,7 @@ class ProjectListResponse(BaseModel):
 
 
 async def get_projects(workspace_id: str, token: str) -> ProjectListResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/workspaces/{workspace_id}/projects"
+    url = f"{BASE_URL}/api/v1/workspaces/{workspace_id}/projects"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -707,7 +709,7 @@ class ProjectDashboardResponse(BaseModel):
 
 
 async def get_project_dashboard(project_id: str, token: str) -> ProjectDashboardResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/projects/{project_id}/dashboard"
+    url = f"{BASE_URL}/api/v1/projects/{project_id}/dashboard"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",

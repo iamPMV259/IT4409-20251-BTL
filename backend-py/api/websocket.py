@@ -12,8 +12,7 @@ logger = get_logger("websocket")
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
-NODEJS_BACKEND_URL = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
-# NODEJS_BACKEND_URL = "http://131.153.239.187:8346"
+NODEJS_BACKEND_URL = nodejs_backend_config.domain if len(nodejs_backend_config.domain) > 0 else f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
 
 sio = socketio.AsyncClient(logger=False, engineio_logger=False)
 

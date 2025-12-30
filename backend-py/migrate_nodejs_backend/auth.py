@@ -5,12 +5,12 @@ from hooks.http_errors import AuthenticationError, BadRequestError, InternalServ
 
 logger = get_logger("nodejs-backend-auth")
 
-
+BASE_URL = nodejs_backend_config.domain if len(nodejs_backend_config.domain) > 0 else f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
 
 
 async def login_to_get_token(email: str, password: str) -> str:
     async with aiohttp.ClientSession() as session:
-        login_url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/auth/login"
+        login_url = f"{BASE_URL}/api/v1/auth/login"
         payload = {"email": email, "password": password}
 
         async with session.post(login_url, json=payload) as response:

@@ -16,6 +16,7 @@ from utils import base64_to_uuid
 logger = get_logger("nodejs-backend-workspaces")
 from uuid import UUID
 
+BASE_URL = nodejs_backend_config.domain if len(nodejs_backend_config.domain) > 0 else f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
 
 async def convert_base64_id_to_uuid(base64_id: str) -> UUID:
     if isinstance(base64_id, UUID):
@@ -259,7 +260,7 @@ class ProjectCreateRequest(BaseModel):
 
 
 async def create_project(workspace_id: str, project_data: ProjectCreateRequest, token: str) -> ProjectCreatedResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/workspaces/{workspace_id}/projects"
+    url = f"{BASE_URL}/api/v1/workspaces/{workspace_id}/projects"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -332,7 +333,7 @@ class ProjectGetResponse(BaseModel):
 
 
 async def get_projects(workspace_id: str, token: str) -> ProjectGetResponse:
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/workspaces/{workspace_id}/projects"
+    url = f"{BASE_URL}/api/v1/workspaces/{workspace_id}/projects"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
