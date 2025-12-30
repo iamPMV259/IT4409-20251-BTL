@@ -1,5 +1,5 @@
 mongo:
-  uri: ""
+  uri: "mongodb://mongodb:mongodb@localhost:27057/"
   db_name: "project_management"
 
 
