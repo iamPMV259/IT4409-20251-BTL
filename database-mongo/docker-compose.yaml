@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  mongodb-project-management:
+    image: mongo:latest
+    container_name: mongodb-project-management
+    restart: unless-stopped
+    ports:
+      - "27057:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongodb
+      MONGO_INITDB_ROOT_PASSWORD: mongodb
+    volumes:
+      - mongodb_data_project_management:/data/db
+      - mongodb_config_project_management:/data/configdb
+    networks:
+      - mongo-network
+
+volumes:
+  mongodb_data_project_management:
+    driver: local
+  mongodb_config_project_management:
+    driver: local
+
+networks:
+  mongo-network:
+    driver: bridge
