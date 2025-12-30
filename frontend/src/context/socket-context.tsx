@@ -17,7 +17,10 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined);
 const WS_PROTOCOL = import.meta.env.VITE_WS_PROTOCOL || 'ws';
 const HOST = import.meta.env.VITE_HOST || 'localhost';
 const PORT = import.meta.env.VITE_PORT || '8345';
-const WS_BASE_URL = `${WS_PROTOCOL}://${HOST}:${PORT}/ws/projects`;
+// Không thêm port nếu là 443 (HTTPS/WSS mặc định) hoặc 80 (HTTP/WS mặc định)
+const WS_BASE_URL = (PORT === '443' || PORT === '80') 
+  ? `${WS_PROTOCOL}://${HOST}/ws/projects`
+  : `${WS_PROTOCOL}://${HOST}:${PORT}/ws/projects`;
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();

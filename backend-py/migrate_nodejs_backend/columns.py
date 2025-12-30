@@ -13,6 +13,8 @@ from hooks.http_errors import (
 
 logger = get_logger("nodejs-backend-columns")
 
+BASE_URL = nodejs_backend_config.domain if len(nodejs_backend_config.domain) > 0 else f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}"
+
 
 class ColumnUpdateRequest(BaseModel):
     title: str | None = None
@@ -53,7 +55,7 @@ class ColumnResponse(BaseModel):
 
 
 async def update_column(column_id: str, update_data: ColumnUpdateRequest, token: str):
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/columns/{column_id}"
+    url = f"{BASE_URL}/api/v1/columns/{column_id}"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",
@@ -83,7 +85,7 @@ async def update_column(column_id: str, update_data: ColumnUpdateRequest, token:
                 raise InternalServerError(f"Update failed with status {response.status}: {error_message}")
 
 async def delete_column(column_id: str, token: str):
-    url = f"http://{nodejs_backend_config.host}:{nodejs_backend_config.port}/api/v1/columns/{column_id}"
+    url = f"{BASE_URL}/api/v1/columns/{column_id}"
     headers = {
         "accept": "*/*",
         "Authorization": f"Bearer {token}",

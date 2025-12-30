@@ -1,9 +1,9 @@
 mongo:
-  uri: "mongodb://mongodb:mongodb@localhost:27057/"
+  uri: "mongodb://mongodb:mongodb@131.153.239.187:27057/"
   db_name: "project_management"
 
 
 nodejs_backend:
-  host: "localhost"
+  host: "10.24.69.116"
   port: "8346"
   domain: "https://test-quanly-1.onrender.com"

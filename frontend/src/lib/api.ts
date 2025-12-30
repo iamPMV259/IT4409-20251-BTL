@@ -5,12 +5,16 @@ import axios from 'axios';
 const HOST = (import.meta as any).env?.VITE_HOST || 'localhost';
 const PORT = (import.meta as any).env?.VITE_PORT || '8345';
 const BASE_ENDPOINT = (import.meta as any).env?.VITE_BASE_ENDPOINT || 'api/v1';
+const BASE_PROTOCOL = (import.meta as any).env?.VITE_HTTP_PROTOCOL || 'http';
 
 // Development: /api/v1 (proxy qua Vite)
 // Production: http://{HOST}:{PORT}/{BASE_ENDPOINT} (direct)
+// Không thêm port nếu là 443 (HTTPS mặc định) hoặc 80 (HTTP mặc định)
 const BASE_URL = (import.meta as any).env?.DEV 
   ? `/${BASE_ENDPOINT}` 
-  : `http://${HOST}:${PORT}/${BASE_ENDPOINT}`;
+  : (PORT === '443' || PORT === '80')
+    ? `${BASE_PROTOCOL}://${HOST}/${BASE_ENDPOINT}`
+    : `${BASE_PROTOCOL}://${HOST}:${PORT}/${BASE_ENDPOINT}`;
 
 const api = axios.create({
   baseURL: BASE_URL,

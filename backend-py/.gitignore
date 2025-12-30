@@ -6,7 +6,6 @@ dist/
 wheels/
 *.egg-info/
 .env
-app-config.yaml
 .ruff_cache/
 ruff_check.json
 pyright_check.json
