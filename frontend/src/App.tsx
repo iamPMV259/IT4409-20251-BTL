@@ -1,6 +1,5 @@
 // src/App.tsx
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useState } from 'react';
 import { DashboardView } from './components/dashboard-view';
 import { ForgotPasswordPage } from './components/forgot-password-page';
@@ -75,7 +74,6 @@ export default function App() {
           <Toaster />
         </SocketProvider>
       </AuthProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }
